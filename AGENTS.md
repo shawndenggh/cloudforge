@@ -31,3 +31,17 @@ History currently uses Conventional Commit-style subjects such as `docs: initial
 ## Security & Configuration
 
 Do not commit credentials, tokens, local environment files, or machine-specific absolute paths. Examples must use placeholders, and new runtime configuration should document safe defaults and required environment variables.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The default five-role triage label vocabulary is used. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repository uses a single-context domain documentation layout. See `docs/agents/domain.md`.
