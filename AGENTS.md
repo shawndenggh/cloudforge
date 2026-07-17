@@ -8,6 +8,9 @@ CloudForge is a Java 25, Spring Boot 4.1, Gradle Groovy multi-project repository
 
 Use the checked-in Gradle Wrapper for application work:
 
+- `make up` initializes and runs the complete local stack.
+- `make init` prepares `.env`, the SDKMAN JDK, and Gradle.
+- `make infra-up`, `make run`, and `make down` provide the split local lifecycle.
 - `./gradlew test` runs all unit tests.
 - `./gradlew build` compiles, tests, and packages every module.
 - `./gradlew :services:gateway:test` tests the Gateway service independently.
@@ -15,6 +18,7 @@ Use the checked-in Gradle Wrapper for application work:
 - `./gradlew :services:gateway:bootRun` runs the local gateway.
 - `./gradlew :services:iam:bootRun` runs IAM against the Compose dependencies.
 - `docker compose config` validates the local infrastructure definition.
+- `sdk env install && sdk env` installs and activates the Java version pinned in `.sdkmanrc`.
 
 For skill or documentation changes, also use these lightweight checks:
 
@@ -24,7 +28,7 @@ For skill or documentation changes, also use these lightweight checks:
 - `find .agents/skills -name '*.sh' -exec bash -n {} +` syntax-checks shell helpers.
 - `git diff --check` catches whitespace errors before review.
 
-The wrapper provisions the Java 25 toolchain when it is not installed locally.
+`.sdkmanrc` pins the developer JDK distribution and patch version. The wrapper provisions a compatible Java 25 toolchain when the SDKMAN-managed JDK is not installed locally.
 
 ## Coding Style & Naming Conventions
 

@@ -27,7 +27,14 @@ shared/
 
 ## Build
 
-The Gradle Wrapper downloads Gradle and a matching Java 25 toolchain when necessary:
+The repository includes an [SDKMAN environment](.sdkmanrc) pinned to Temurin Java 25. Developers with SDKMAN installed can install and activate it from the repository root:
+
+```bash
+sdk env install
+sdk env
+```
+
+SDKMAN can also switch environments automatically when `sdkman_auto_env=true` is enabled in the developer's local SDKMAN configuration. The Gradle Wrapper remains able to download a matching Java 25 toolchain when necessary:
 
 ```bash
 ./gradlew test
@@ -45,9 +52,31 @@ Useful module tasks:
 
 GitHub Actions runs Gateway and IAM tests as separate jobs, with `fail-fast` disabled so one service failure does not prevent the other service from completing. The shared modules run in their own job. See [CI Test](.github/workflows/ci-test.yml).
 
+## Quick start
+
+Initialize the developer environment and start the complete local stack with one command:
+
+```bash
+make up
+```
+
+This creates `.env` when missing, installs and activates the `.sdkmanrc` JDK when SDKMAN is available, waits for PostgreSQL, RabbitMQ, and Redis to become healthy, then runs IAM and Gateway together. Press `Ctrl+C` to stop the applications; the data services remain available for the next run.
+
+The same lifecycle can be run in separate terminals when debugging:
+
+```bash
+make init       # Prepare .env, Java, and Gradle
+make infra-up    # Start and health-check data services
+make run         # Run IAM and Gateway
+make status      # Show data service status
+make down        # Stop data services, preserving volumes
+```
+
+Run `make help` to list all development commands. Ports can be overridden without editing committed files, for example `make up IAM_SERVER_PORT=19000 GATEWAY_SERVER_PORT=18080`.
+
 ## Local infrastructure
 
-Local application development uses Docker Compose rather than requiring Kubernetes:
+Local application development uses Docker Compose rather than requiring Kubernetes. The underlying manual commands remain available when Make is not installed:
 
 ```bash
 cp .env.example .env

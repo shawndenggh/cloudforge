@@ -30,7 +30,7 @@ spring:
         issuer: ${IAM_ISSUER:http://localhost:9000}
 
 server:
-  port: ${SERVER_PORT:9000}
+  port: ${IAM_SERVER_PORT:${SERVER_PORT:9000}}
   servlet:
     session:
       cookie:
@@ -48,4 +48,3 @@ management:
     health:
       probes:
         enabled: true
-
