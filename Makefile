@@ -24,7 +24,7 @@ export GATEWAY_SERVER_PORT
 export IAM_ISSUER
 export IAM_BASE_URL
 
-.PHONY: help doctor init test infra-up infra-down down infra-logs status run up
+.PHONY: help doctor init format check test infra-up infra-down down infra-logs status run up
 
 help: ## Show available commands
 	@awk 'BEGIN {FS = ":.*## "; printf "CloudForge development commands:\n\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -54,10 +54,17 @@ init: doctor ## Create local config, install the SDKMAN JDK, and initialize Grad
 	"$(PROJECT_ROOT)/gradlew" help --no-daemon --quiet
 	@echo "CloudForge development environment is ready."
 
-test: init ## Run all module tests
-	@source "$(ENV_FILE)"; \
-	if [[ -s "$(SDKMAN_INIT)" ]]; then source "$(SDKMAN_INIT)" && sdk env >/dev/null; fi; \
-	"$(PROJECT_ROOT)/gradlew" check --no-daemon
+format: ## Apply repository and Java source formatting
+	@if [[ -s "$(SDKMAN_INIT)" ]]; then source "$(SDKMAN_INIT)" && sdk env >/dev/null; fi; \
+	"$(PROJECT_ROOT)/gradlew" formatAll --no-daemon
+
+check: ## Run formatting, static analysis, architecture checks, and tests
+	@if [[ -s "$(SDKMAN_INIT)" ]]; then source "$(SDKMAN_INIT)" && sdk env >/dev/null; fi; \
+	"$(PROJECT_ROOT)/gradlew" qualityCheck --no-daemon
+
+test: ## Run all module tests
+	@if [[ -s "$(SDKMAN_INIT)" ]]; then source "$(SDKMAN_INIT)" && sdk env >/dev/null; fi; \
+	"$(PROJECT_ROOT)/gradlew" test --no-daemon
 
 infra-up: init ## Start PostgreSQL, RabbitMQ, and Redis and wait until healthy
 	@docker compose --project-directory "$(PROJECT_ROOT)" up -d --wait

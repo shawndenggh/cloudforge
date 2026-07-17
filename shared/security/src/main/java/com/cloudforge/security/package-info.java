@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 /**
- * Owns users, credentials, authentication policy, and account lifecycle inside the IAM
- * bounded context.
+ * Tenant-aware Spring Security integration shared by resource services.
  */
 @NullMarked
-package com.cloudforge.iam.identity;
+package com.cloudforge.security;
 
 import org.jspecify.annotations.NullMarked;

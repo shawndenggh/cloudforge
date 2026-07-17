@@ -34,12 +34,14 @@ sdk env install
 sdk env
 ```
 
-SDKMAN can also switch environments automatically when `sdkman_auto_env=true` is enabled in the developer's local SDKMAN configuration. The Gradle Wrapper remains able to download a matching Java 25 toolchain when necessary:
+SDKMAN can also switch environments automatically when `sdkman_auto_env=true` is enabled in the developer's local SDKMAN configuration. The Gradle Wrapper remains able to download a matching Java 25 toolchain when necessary. Apply and verify the complete quality policy with:
 
 ```bash
-./gradlew test
-./gradlew build
+make format
+make check
 ```
+
+`make check` is the merge gate: it verifies repository and Java formatting, the Apache 2.0 source header, Spring Checkstyle, Error Prone, NullAway/JSpecify, ArchUnit boundaries, and tests. See the [code style and quality gate](docs/development/code-style.md) and [ADR 0030](docs/adr/0030-executable-spring-code-quality-gate.md).
 
 Useful module tasks:
 
@@ -50,7 +52,7 @@ Useful module tasks:
 ./gradlew :services:iam:bootRun
 ```
 
-GitHub Actions runs Gateway and IAM tests as separate jobs, with `fail-fast` disabled so one service failure does not prevent the other service from completing. The shared modules run in their own job. See [CI Test](.github/workflows/ci-test.yml).
+GitHub Actions checks Gateway and IAM as separate jobs, with `fail-fast` disabled so one service failure does not prevent the other service from completing. Repository style and the shared modules run in independent jobs. See [CI Check](.github/workflows/ci-test.yml).
 
 ## Quick start
 
@@ -73,6 +75,8 @@ make down        # Stop data services, preserving volumes
 ```
 
 Run `make help` to list all development commands. Ports can be overridden without editing committed files, for example `make up IAM_SERVER_PORT=19000 GATEWAY_SERVER_PORT=18080`.
+
+CloudForge is open source under the [Apache License 2.0](LICENSE).
 
 ## Local infrastructure
 

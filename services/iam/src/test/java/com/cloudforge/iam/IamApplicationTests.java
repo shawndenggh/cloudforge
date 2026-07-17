@@ -13,11 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/**
- * Owns users, credentials, authentication policy, and account lifecycle inside the IAM
- * bounded context.
- */
-@NullMarked
-package com.cloudforge.iam.identity;
+package com.cloudforge.iam;
 
-import org.jspecify.annotations.NullMarked;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class IamApplicationTests {
+
+	@Test
+	void exposesAnApplicationEntryPoint() {
+		assertThat(IamApplication.class).isNotNull();
+	}
+
+}

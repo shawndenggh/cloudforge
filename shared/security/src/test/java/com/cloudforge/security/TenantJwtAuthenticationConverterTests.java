@@ -15,26 +15,27 @@
  */
 package com.cloudforge.security;
 
-import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.context.annotation.Bean;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
 import org.springframework.security.oauth2.jwt.Jwt;
 
-@AutoConfiguration
-@ConditionalOnClass(Jwt.class)
-public class TenantSecurityAutoConfiguration {
+import static org.assertj.core.api.Assertions.assertThat;
 
-	@Bean
-	@ConditionalOnMissingBean
-	TenantJwtAuthenticationConverter tenantJwtAuthenticationConverter() {
-		return new TenantJwtAuthenticationConverter();
-	}
+class TenantJwtAuthenticationConverterTests {
 
-	@Bean
-	@ConditionalOnMissingBean
-	CurrentTenant currentTenant() {
-		return new SecurityContextCurrentTenant();
+	@Test
+	void mapsPermissionCodesWithoutChangingTheirNames() {
+		Jwt jwt = new Jwt("token", Instant.now(), Instant.now().plusSeconds(300), Map.of("alg", "none"),
+				Map.of("sub", "user-1", "permissions", List.of("order:read", "order:refund")));
+
+		TenantJwtAuthenticationConverter converter = new TenantJwtAuthenticationConverter();
+
+		assertThat(converter.authorities(jwt)).extracting((authority) -> authority.getAuthority())
+			.contains("order:read", "order:refund");
 	}
 
 }

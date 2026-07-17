@@ -34,4 +34,3 @@ Provides the versioned `EventEnvelope` and its tenant and ordering invariants. R
 - One deployable application never imports another application's implementation.
 - Remote interaction uses HTTP contracts or Integration Events, not shared JPA entities.
 - A new service requires a concrete business capability, owned data, and an independently useful deployment boundary.
-

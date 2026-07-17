@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 /**
- * Owns users, credentials, authentication policy, and account lifecycle inside the IAM
- * bounded context.
+ * CloudForge identity and access management bounded context.
  */
 @NullMarked
-package com.cloudforge.iam.identity;
+package com.cloudforge.iam;
 
 import org.jspecify.annotations.NullMarked;

@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 /**
- * Owns users, credentials, authentication policy, and account lifecycle inside the IAM
- * bounded context.
+ * Tenant-aware integration messaging contracts and transport metadata.
  */
 @NullMarked
-package com.cloudforge.iam.identity;
+package com.cloudforge.messaging;
 
 import org.jspecify.annotations.NullMarked;
