@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: iam
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/iam}
+    username: ${DB_USERNAME:cloudforge}
+    password: ${DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:cloudforge}
+    password: ${RABBITMQ_PASSWORD:}
+  session:
+    redis:
+      namespace: cf:${APP_ENV:local}:iam:session
+  security:
+    oauth2:
+      authorizationserver:
+        issuer: ${IAM_ISSUER:http://localhost:9000}
+
+server:
+  port: ${SERVER_PORT:9000}
+  servlet:
+    session:
+      cookie:
+        name: IAMSESSION
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:false}
+        same-site: lax
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+

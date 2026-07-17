@@ -1,61 +1,69 @@
 # CloudForge
 
-CloudForge is a production-oriented foundation for building scalable, maintainable, and observable distributed applications.
+CloudForge is a production-oriented, multi-tenant foundation for Spring-based distributed applications. The repository is a Gradle Groovy multi-project build and currently contains the smallest service topology justified by the confirmed domain model.
 
-The project provides a practical starting point for common platform capabilities, including service discovery, centralized configuration, API gateway integration, authentication and authorization, distributed messaging, observability, and containerized deployment.
+## Platform baseline
 
-## Goals
+- Java 25
+- Spring Boot 4.1.0
+- Spring Cloud 2025.1.2 (Oakwood)
+- Gradle 9.6.1
+- PostgreSQL, RabbitMQ, and Redis
+- Kubernetes-only production deployment
 
-- Provide a clear and modular application foundation
-- Standardize common infrastructure capabilities
-- Keep business modules independent from platform concerns
-- Support local development and production-oriented deployment
-- Make architectural decisions easy to understand and extend
+## Modules
 
-## Planned Capabilities
+```text
+services/
+├── gateway/       Thin Spring Cloud Gateway Server MVC edge application
+└── iam/           IAM bounded context and OAuth/OIDC authorization server
 
-- Service registration and discovery
-- Centralized configuration management
-- API gateway and request routing
-- Authentication and authorization
-- Distributed caching and messaging
-- Resilience, rate limiting, and fault isolation
-- Logging, metrics, and distributed tracing
-- Database migration and persistence conventions
-- Docker and Kubernetes deployment examples
+shared/
+├── security/      Tenant-aware Resource Server integration
+└── messaging/     Versioned Integration Event envelope
+```
 
-## Technology Stack
+`iam` is currently the only domain service. User identity, credentials, Tenants, Memberships, roles, and permissions are internal IAM modules rather than independent network services. `gateway` is a deployable edge application, not a bounded context. See [the module map](docs/architecture/modules.md) and [ADR 0029](docs/adr/0029-minimal-initial-service-topology.md).
 
-The initial implementation is planned around the following technologies:
+## Build
 
-- Java
-- Spring Boot
-- Spring Cloud
-- PostgreSQL
-- Redis
-- RabbitMQ
-- Docker
-- Kubernetes
+The Gradle Wrapper downloads Gradle and a matching Java 25 toolchain when necessary:
 
-The technology stack may evolve as the project develops. Platform components should remain replaceable where practical.
+```bash
+./gradlew test
+./gradlew build
+```
 
-## Project Status
+Useful module tasks:
 
-CloudForge is currently in the initial setup stage. The repository is intended to evolve incrementally, with each capability documented and introduced as an independently understandable module.
+```bash
+./gradlew :services:gateway:bootRun
+./gradlew :services:iam:bootRun
+```
 
-## Getting Started
+## Local infrastructure
 
-Implementation and setup instructions will be added as the first modules are introduced.
+Local application development uses Docker Compose rather than requiring Kubernetes:
 
-## Contributing
+```bash
+cp .env.example .env
+# Replace the placeholder passwords in .env, then export them for local applications.
+set -a
+source .env
+set +a
+docker compose up -d
+```
 
-Contributions, suggestions, and improvements are welcome. Before opening a pull request, please:
+The default local endpoints are:
 
-1. Read the relevant documentation and existing design decisions.
-2. Keep changes focused and backward-compatible where possible.
-3. Add or update tests for behavioral changes.
-4. Explain architectural or operational trade-offs in the pull request description.
+- PostgreSQL: `localhost:5432`, database `iam`
+- RabbitMQ: `localhost:5672`, management UI `http://localhost:15672`
+- Redis: `localhost:6379`
+- IAM: `http://localhost:9000`
+- Gateway: `http://localhost:8080`
 
-## License
+The IAM module currently establishes its runtime dependencies and internal package boundaries; user persistence, registered OIDC clients, signing keys, and production login behavior will be added as tested domain slices rather than insecure placeholder implementations.
 
-License information will be added before the first public release.
+## Architecture decisions
+
+Confirmed decisions live under [`docs/adr`](docs/adr), and the multi-tenant ubiquitous language lives in [`CONTEXT.md`](CONTEXT.md). New services must own a concrete business capability and data model; infrastructure reuse alone is not a reason to create a network boundary.

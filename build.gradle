@@ -1,0 +1,39 @@
+plugins {
+    alias(libs.plugins.springBoot) apply false
+    alias(libs.plugins.springDependencyManagement) apply false
+}
+
+allprojects {
+    group = 'com.cloudforge'
+    version = '0.1.0-SNAPSHOT'
+}
+
+def springBootVersion = libs.versions.springBoot.get()
+def springCloudVersion = libs.versions.springCloud.get()
+
+configure(subprojects.findAll { it.buildFile.exists() }) {
+    apply plugin: 'java'
+    apply plugin: 'io.spring.dependency-management'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(25)
+        }
+    }
+
+    dependencyManagement {
+        imports {
+            mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
+            mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs.add('-parameters')
+        options.encoding = 'UTF-8'
+    }
+
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+    }
+}
