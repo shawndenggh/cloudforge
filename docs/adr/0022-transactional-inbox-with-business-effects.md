@@ -1,0 +1,3 @@
+# Transactional Inbox with business effects
+
+Each CloudForge consumer inserts its `(consumer_name, event_id)` Inbox record, applies business changes, and writes any resulting Outbox events in the same local database transaction, then acknowledges RabbitMQ only after commit. A uniqueness conflict means that logical consumer already completed the event and may acknowledge it safely; rollback removes the attempted Inbox record so delivery can retry. This gives once-only local database effects, not end-to-end exactly-once external side effects, which still require idempotency keys or Outbox/Saga coordination.

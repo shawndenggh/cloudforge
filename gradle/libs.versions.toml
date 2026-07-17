@@ -1,0 +1,19 @@
+[versions]
+springBoot = "4.1.0"
+springCloud = "2025.1.2"
+springDependencyManagement = "1.1.7"
+springJavaFormat = "0.0.47"
+spotless = "8.8.0"
+errorPronePlugin = "5.1.0"
+errorProne = "2.50.0"
+nullAway = "0.13.7"
+jspecify = "1.0.0"
+checkstyle = "10.26.1"
+archunit = "1.4.2"
+
+[plugins]
+springBoot = { id = "org.springframework.boot", version.ref = "springBoot" }
+springDependencyManagement = { id = "io.spring.dependency-management", version.ref = "springDependencyManagement" }
+springJavaFormat = { id = "io.spring.javaformat", version.ref = "springJavaFormat" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+errorProne = { id = "net.ltgt.errorprone", version.ref = "errorPronePlugin" }

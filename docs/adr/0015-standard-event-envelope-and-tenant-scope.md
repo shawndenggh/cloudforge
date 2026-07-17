@@ -1,0 +1,3 @@
+# Standard event envelope and tenant scope
+
+CloudForge wraps every Integration Event payload in a standard Event Envelope containing `eventId`, `eventType`, `eventVersion`, `scope`, `tenantId`, `source`, `occurredAt`, `correlationId`, and `causationId`, plus optional `subject` and `subjectVersion` ordering metadata. Tenant-scoped events require a `tenantId`, while platform-scoped events explicitly use `scope=PLATFORM` without one. Consumers establish the trusted tenant execution context from the envelope, use `eventId` for Inbox deduplication, and never infer tenant authority from the payload.
