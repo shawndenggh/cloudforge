@@ -1,0 +1,71 @@
+name: CI Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  service-test:
+    name: Test service - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: gateway
+            task: :services:gateway:test
+          - service: iam
+            task: :services:iam:test
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Test ${{ matrix.service }}
+        run: ./gradlew ${{ matrix.task }} --no-daemon --stacktrace
+
+  shared-test:
+    name: Test shared modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Test shared modules
+        run: >-
+          ./gradlew
+          :shared:security:test
+          :shared:messaging:test
+          --no-daemon
+          --stacktrace

@@ -10,6 +10,8 @@ Use the checked-in Gradle Wrapper for application work:
 
 - `./gradlew test` runs all unit tests.
 - `./gradlew build` compiles, tests, and packages every module.
+- `./gradlew :services:gateway:test` tests the Gateway service independently.
+- `./gradlew :services:iam:test` tests the IAM service independently.
 - `./gradlew :services:gateway:bootRun` runs the local gateway.
 - `./gradlew :services:iam:bootRun` runs IAM against the Compose dependencies.
 - `docker compose config` validates the local infrastructure definition.

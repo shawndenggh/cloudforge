@@ -37,9 +37,13 @@ The Gradle Wrapper downloads Gradle and a matching Java 25 toolchain when necess
 Useful module tasks:
 
 ```bash
+./gradlew :services:gateway:test
+./gradlew :services:iam:test
 ./gradlew :services:gateway:bootRun
 ./gradlew :services:iam:bootRun
 ```
+
+GitHub Actions runs Gateway and IAM tests as separate jobs, with `fail-fast` disabled so one service failure does not prevent the other service from completing. The shared modules run in their own job. See [CI Test](.github/workflows/ci-test.yml).
 
 ## Local infrastructure
 
