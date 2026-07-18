@@ -1,9 +1,6 @@
 plugins {
-    alias(libs.plugins.springBoot) apply false
-    alias(libs.plugins.springDependencyManagement) apply false
-    alias(libs.plugins.springJavaFormat) apply false
-    alias(libs.plugins.spotless)
-    alias(libs.plugins.errorProne) apply false
+    alias(buildLibs.plugins.spotless)
+    id 'cloudforge.java-conventions' apply false
 }
 
 allprojects {
@@ -11,112 +8,21 @@ allprojects {
     version = '0.1.0-SNAPSHOT'
 }
 
-def springBootVersion = libs.versions.springBoot.get()
-def springCloudVersion = libs.versions.springCloud.get()
-def springJavaFormatVersion = libs.versions.springJavaFormat.get()
-def errorProneVersion = libs.versions.errorProne.get()
-def nullAwayVersion = libs.versions.nullAway.get()
-def jspecifyVersion = libs.versions.jspecify.get()
-def checkstyleVersion = libs.versions.checkstyle.get()
-def archunitVersion = libs.versions.archunit.get()
+def moduleProjects = subprojects.findAll { it.buildFile.exists() }
+
+configure(moduleProjects) {
+    apply plugin: 'cloudforge.java-conventions'
+}
 
 spotless {
     format('repository') {
         target '.editorconfig', '.env.example', 'LICENSE', 'Makefile', '*.md', '*.gradle',
                 '*.properties', '*.toml', '*.yaml', '*.yml', '.github/**/*.yml',
-                'config/**/*.xml', 'config/**/*.txt', 'docs/**/*.md', 'gradle/**/*.toml'
+                'build-logic/**/*.gradle', 'build-logic/**/*.toml', 'config/**/*.xml', 'config/**/*.txt',
+                'docs/**/*.md', 'gradle/**/*.toml'
         targetExclude '.gradle/**', '**/build/**'
         trimTrailingWhitespace()
         endWithNewline()
-    }
-}
-
-configure(subprojects.findAll { it.buildFile.exists() }) {
-    if (path.startsWith(':shared:')) {
-        apply plugin: 'java-library'
-    }
-    else {
-        apply plugin: 'java'
-    }
-    apply plugin: 'io.spring.dependency-management'
-    apply plugin: 'io.spring.javaformat'
-    apply plugin: 'com.diffplug.spotless'
-    apply plugin: 'checkstyle'
-    apply plugin: 'net.ltgt.errorprone'
-
-    java {
-        toolchain {
-            languageVersion = JavaLanguageVersion.of(25)
-        }
-    }
-
-    dependencyManagement {
-        imports {
-            mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
-            mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
-        }
-    }
-
-    dependencies {
-        if (path.startsWith(':shared:')) {
-            api "org.jspecify:jspecify:${jspecifyVersion}"
-        }
-        else {
-            implementation "org.jspecify:jspecify:${jspecifyVersion}"
-        }
-        checkstyle "io.spring.javaformat:spring-javaformat-checkstyle:${springJavaFormatVersion}"
-        errorprone "com.google.errorprone:error_prone_core:${errorProneVersion}"
-        errorprone "com.uber.nullaway:nullaway:${nullAwayVersion}"
-        testImplementation "com.tngtech.archunit:archunit-junit5:${archunitVersion}"
-    }
-
-    spotless {
-        java {
-            targetExclude 'src/**/package-info.java'
-            licenseHeaderFile rootProject.file('config/license/java-header.txt')
-        }
-        format('packageInfo') {
-            target 'src/**/package-info.java'
-            licenseHeaderFile rootProject.file('config/license/java-header.txt'), '(?=/\\*\\*)'
-        }
-    }
-
-    checkstyle {
-        toolVersion = checkstyleVersion
-        configFile = rootProject.file('config/checkstyle/checkstyle.xml')
-        maxWarnings = 0
-    }
-
-    tasks.withType(JavaCompile).configureEach {
-        options.compilerArgs.addAll(['-parameters', '-Xlint:all', '-Werror'])
-        options.encoding = 'UTF-8'
-        options.errorprone {
-            disableWarningsInGeneratedCode = true
-        }
-        if (name == 'compileJava') {
-            options.errorprone {
-                error('NullAway')
-                option('NullAway:OnlyNullMarked', 'true')
-                option('NullAway:JSpecifyMode', 'true')
-            }
-        }
-        else {
-            options.errorprone.disable('NullAway')
-        }
-    }
-
-    tasks.withType(Test).configureEach {
-        useJUnitPlatform()
-    }
-
-    tasks.named('spotlessJava').configure {
-        mustRunAfter tasks.named('formatMain')
-        mustRunAfter tasks.named('formatTest')
-    }
-
-    tasks.named('spotlessPackageInfo').configure {
-        mustRunAfter tasks.named('formatMain')
-        mustRunAfter tasks.named('formatTest')
     }
 }
 
@@ -124,13 +30,14 @@ tasks.register('formatAll') {
     group = 'formatting'
     description = 'Applies repository, license header, and Spring Java formatting rules.'
     dependsOn tasks.named('spotlessApply')
-    dependsOn subprojects.findAll { it.buildFile.exists() }.collect { it.tasks.named('spotlessApply') }
-    dependsOn subprojects.findAll { it.buildFile.exists() }.collect { it.tasks.named('format') }
+    dependsOn moduleProjects.collect { it.tasks.named('spotlessApply') }
+    dependsOn moduleProjects.collect { it.tasks.named('format') }
 }
 
 tasks.register('qualityCheck') {
     group = 'verification'
     description = 'Runs every formatting, static analysis, architecture, and test gate.'
     dependsOn tasks.named('spotlessCheck')
-    dependsOn subprojects.findAll { it.buildFile.exists() }.collect { it.tasks.named('check') }
+    dependsOn moduleProjects.collect { it.tasks.named('check') }
+    dependsOn gradle.includedBuild('build-logic').task(':check')
 }

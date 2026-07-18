@@ -41,7 +41,7 @@ make format
 make check
 ```
 
-`make check` is the merge gate: it verifies repository and Java formatting, the Apache 2.0 source header, Spring Checkstyle, Error Prone, NullAway/JSpecify, ArchUnit boundaries, and tests. See the [code style and quality gate](docs/development/code-style.md) and [ADR 0030](docs/adr/0030-executable-spring-code-quality-gate.md).
+`make check` is the merge gate: it verifies repository and Java formatting, the Apache 2.0 source header, Checkstyle, Error Prone, NullAway/JSpecify, ArchUnit boundaries, and tests. See the [code style and quality gate](docs/development/code-style.md) and [ADR 0030](docs/adr/0030-executable-java-code-quality-gate.md).
 
 Useful module tasks:
 

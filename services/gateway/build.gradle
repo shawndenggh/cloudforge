@@ -1,12 +1,14 @@
 plugins {
-    id 'org.springframework.boot'
+    alias(libs.plugins.springBoot)
 }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'org.springframework.cloud:spring-cloud-starter-gateway-server-webmvc'
+    implementation platform(libs.springBootDependencies)
+    implementation platform(libs.springCloudDependencies)
 
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    implementation libs.springBootStarterActuator
+    implementation libs.springCloudStarterGatewayServerWebmvc
+
+    testImplementation libs.springBootStarterTest
+    testRuntimeOnly libs.junitPlatformLauncher
 }
-

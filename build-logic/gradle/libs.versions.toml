@@ -1,0 +1,22 @@
+[versions]
+spotless = "8.8.0"
+springJavaFormat = "0.0.47"
+errorPronePlugin = "5.1.0"
+errorProne = "2.50.0"
+nullAway = "0.13.7"
+jspecify = "1.0.0"
+checkstyle = "10.26.1"
+archunit = "1.4.2"
+
+[libraries]
+errorProneCore = { module = "com.google.errorprone:error_prone_core", version.ref = "errorProne" }
+nullAway = { module = "com.uber.nullaway:nullaway", version.ref = "nullAway" }
+jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
+checkstyle = { module = "com.puppycrawl.tools:checkstyle", version.ref = "checkstyle" }
+archunitJunit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+springJavaFormatGradlePlugin = { module = "io.spring.javaformat:io.spring.javaformat.gradle.plugin", version.ref = "springJavaFormat" }
+spotlessGradlePlugin = { module = "com.diffplug.spotless:com.diffplug.spotless.gradle.plugin", version.ref = "spotless" }
+errorProneGradlePlugin = { module = "net.ltgt.errorprone:net.ltgt.errorprone.gradle.plugin", version.ref = "errorPronePlugin" }
+
+[plugins]
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }

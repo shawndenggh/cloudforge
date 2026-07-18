@@ -1,0 +1,77 @@
+import org.gradle.api.artifacts.VersionCatalogsExtension
+
+plugins {
+    id 'java'
+    id 'io.spring.javaformat'
+    id 'com.diffplug.spotless'
+    id 'checkstyle'
+    id 'net.ltgt.errorprone'
+}
+
+def libraries = rootProject.extensions.getByType(VersionCatalogsExtension).named('buildLibs')
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+dependencies {
+    checkstyle libraries.findLibrary('checkstyle').get()
+    errorprone libraries.findLibrary('errorProneCore').get()
+    errorprone libraries.findLibrary('nullAway').get()
+    testImplementation libraries.findLibrary('archunitJunit5').get()
+}
+
+afterEvaluate {
+    dependencies.add(pluginManager.hasPlugin('java-library') ? 'api' : 'implementation',
+            libraries.findLibrary('jspecify').get())
+}
+
+spotless {
+    java {
+        targetExclude 'src/**/package-info.java'
+        licenseHeaderFile rootProject.file('config/license/java-header.txt')
+    }
+    format('packageInfo') {
+        target 'src/**/package-info.java'
+        licenseHeaderFile rootProject.file('config/license/java-header.txt'), '(?=/\\*\\*)'
+    }
+}
+
+checkstyle {
+    configFile = rootProject.file('config/checkstyle/checkstyle.xml')
+    maxWarnings = 0
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.addAll(['-parameters', '-Xlint:all', '-Werror'])
+    options.encoding = 'UTF-8'
+    options.errorprone {
+        disableWarningsInGeneratedCode = true
+    }
+    if (name == 'compileJava') {
+        options.errorprone {
+            error('NullAway')
+            option('NullAway:OnlyNullMarked', 'true')
+            option('NullAway:JSpecifyMode', 'true')
+        }
+    }
+    else {
+        options.errorprone.disable('NullAway')
+    }
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+tasks.named('spotlessJava').configure {
+    mustRunAfter tasks.named('formatMain')
+    mustRunAfter tasks.named('formatTest')
+}
+
+tasks.named('spotlessPackageInfo').configure {
+    mustRunAfter tasks.named('formatMain')
+    mustRunAfter tasks.named('formatTest')
+}
