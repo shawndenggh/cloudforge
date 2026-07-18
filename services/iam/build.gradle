@@ -5,21 +5,20 @@ plugins {
 dependencies {
     implementation project(':shared:messaging')
 
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'org.springframework.boot:spring-boot-starter-amqp'
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-flyway'
-    implementation 'org.springframework.boot:spring-boot-starter-security'
-    implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-authorization-server'
-    implementation 'org.springframework.boot:spring-boot-starter-session-data-redis'
-    implementation 'org.springframework.boot:spring-boot-starter-validation'
-    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-    implementation 'org.flywaydb:flyway-database-postgresql'
+    implementation libs.springBootStarterActuator
+    implementation libs.springBootStarterAmqp
+    implementation libs.springBootStarterDataJpa
+    implementation libs.springBootStarterFlyway
+    implementation libs.springBootStarterSecurity
+    implementation libs.springBootStarterSecurityOauth2AuthorizationServer
+    implementation libs.springBootStarterSessionDataRedis
+    implementation libs.springBootStarterValidation
+    implementation libs.springBootStarterWebmvc
+    implementation libs.flywayDatabasePostgresql
 
-    runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly libs.postgresql
 
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation libs.springBootStarterTest
+    testImplementation libs.springBootStarterSecurityTest
+    testRuntimeOnly libs.junitPlatformLauncher
 }
-

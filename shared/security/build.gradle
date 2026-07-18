@@ -3,13 +3,12 @@ plugins {
 }
 
 dependencies {
-    api 'org.springframework.boot:spring-boot-starter-security'
-    api 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
+    api libs.springBootStarterSecurity
+    api libs.springBootStarterSecurityOauth2ResourceServer
 
-    implementation 'org.springframework.boot:spring-boot-autoconfigure'
+    implementation libs.springBootAutoconfigure
 
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation libs.springBootStarterTest
+    testImplementation libs.springBootStarterSecurityTest
+    testRuntimeOnly libs.junitPlatformLauncher
 }
-

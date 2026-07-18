@@ -3,10 +3,9 @@ plugins {
 }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'org.springframework.cloud:spring-cloud-starter-gateway-server-webmvc'
+    implementation libs.springBootStarterActuator
+    implementation libs.springCloudStarterGatewayServerWebmvc
 
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation libs.springBootStarterTest
+    testRuntimeOnly libs.junitPlatformLauncher
 }
-

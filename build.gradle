@@ -11,14 +11,7 @@ allprojects {
     version = '0.1.0-SNAPSHOT'
 }
 
-def springBootVersion = libs.versions.springBoot.get()
-def springCloudVersion = libs.versions.springCloud.get()
-def springJavaFormatVersion = libs.versions.springJavaFormat.get()
-def errorProneVersion = libs.versions.errorProne.get()
-def nullAwayVersion = libs.versions.nullAway.get()
-def jspecifyVersion = libs.versions.jspecify.get()
-def checkstyleVersion = libs.versions.checkstyle.get()
-def archunitVersion = libs.versions.archunit.get()
+def libraries = libs
 
 spotless {
     format('repository') {
@@ -52,22 +45,23 @@ configure(subprojects.findAll { it.buildFile.exists() }) {
 
     dependencyManagement {
         imports {
-            mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
-            mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+            mavenBom libraries.springBootDependencies.get().toString()
+            mavenBom libraries.springCloudDependencies.get().toString()
         }
     }
 
     dependencies {
         if (path.startsWith(':shared:')) {
-            api "org.jspecify:jspecify:${jspecifyVersion}"
+            api libraries.jspecify
         }
         else {
-            implementation "org.jspecify:jspecify:${jspecifyVersion}"
+            implementation libraries.jspecify
         }
-        checkstyle "io.spring.javaformat:spring-javaformat-checkstyle:${springJavaFormatVersion}"
-        errorprone "com.google.errorprone:error_prone_core:${errorProneVersion}"
-        errorprone "com.uber.nullaway:nullaway:${nullAwayVersion}"
-        testImplementation "com.tngtech.archunit:archunit-junit5:${archunitVersion}"
+        checkstyle libraries.checkstyle
+        checkstyle libraries.springJavaFormatCheckstyle
+        errorprone libraries.errorProneCore
+        errorprone libraries.nullAway
+        testImplementation libraries.archunitJunit5
     }
 
     spotless {
@@ -82,7 +76,6 @@ configure(subprojects.findAll { it.buildFile.exists() }) {
     }
 
     checkstyle {
-        toolVersion = checkstyleVersion
         configFile = rootProject.file('config/checkstyle/checkstyle.xml')
         maxWarnings = 0
     }
