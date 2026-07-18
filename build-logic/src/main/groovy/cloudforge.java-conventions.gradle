@@ -35,6 +35,15 @@ dependencies {
 }
 
 afterEvaluate {
+    if (path.startsWith(':shared:')) {
+        def bootDependencies = configurations.collectMany { it.dependencies }
+            .findAll { it.group == 'org.springframework.boot' }
+            .collect { "${it.group}:${it.name}" }
+            .unique()
+        if (!bootDependencies.empty) {
+            throw new GradleException("Shared modules cannot depend on Spring Boot: ${bootDependencies.join(', ')}")
+        }
+    }
     dependencies.add(pluginManager.hasPlugin('java-library') ? 'api' : 'implementation',
             libraries.findLibrary('jspecify').get())
 }

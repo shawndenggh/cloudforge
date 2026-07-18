@@ -3,6 +3,7 @@ plugins {
 }
 
 dependencies {
-    testImplementation libs.springBootStarterTest
+    testImplementation libs.junitJupiter
+    testImplementation libs.assertjCore
     testRuntimeOnly libs.junitPlatformLauncher
 }

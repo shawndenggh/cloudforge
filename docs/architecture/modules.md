@@ -21,7 +21,7 @@ A thin Spring Cloud Gateway Server MVC application for routing and edge policies
 
 ### `shared/security`
 
-Provides the tenant-aware security seam consumed by future domain services: stable permission conversion and a `CurrentTenant` interface backed by the authenticated JWT. Each domain service still owns its `SecurityFilterChain` and endpoint authorization rules.
+Provides the tenant-aware security seam consumed by future domain services: stable permission conversion and a `CurrentTenant` interface backed by the authenticated JWT. It depends only on Spring Security libraries and provides no Spring Boot auto-configuration. Each domain service owns bean wiring, its `SecurityFilterChain`, and endpoint authorization rules.
 
 ### `shared/messaging`
 
@@ -31,6 +31,7 @@ Provides the versioned `EventEnvelope` and its tenant and ordering invariants. R
 
 - Deployable applications may depend on shared modules.
 - Shared modules never depend on deployable applications.
+- Shared modules never depend directly on Spring Boot, including its Starters and auto-configuration packages; they use lower-level framework libraries managed by the platform BOM.
 - One deployable application never imports another application's implementation.
 - Remote interaction uses HTTP contracts or Integration Events, not shared JPA entities.
 - A new service requires a concrete business capability, owned data, and an independently useful deployment boundary.

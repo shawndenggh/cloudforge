@@ -28,11 +28,12 @@ final class SecurityArchitectureTests {
 	}
 
 	@ArchTest
-	static final ArchRule SECURITY_STARTER_HAS_NO_SERVICE_IMPLEMENTATION_DEPENDENCIES = ArchRuleDefinition.noClasses()
+	static final ArchRule SECURITY_LIBRARY_HAS_NO_BOOT_OR_SERVICE_IMPLEMENTATION_DEPENDENCIES = ArchRuleDefinition
+		.noClasses()
 		.should()
 		.dependOnClassesThat()
 		.resideInAnyPackage("com.cloudforge.iam..", "com.cloudforge.gateway..", "com.cloudforge.messaging..",
-				"jakarta.persistence..", "org.hibernate..")
-		.because("the security starter must remain reusable by every domain service");
+				"jakarta.persistence..", "org.hibernate..", "org.springframework.boot..")
+		.because("the security library must remain independent from Spring Boot and deployable services");
 
 }

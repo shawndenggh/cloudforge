@@ -41,7 +41,7 @@ ArchUnit tests are hard gates with no frozen baseline. Existing code and every n
 - IAM domain packages do not depend on Spring, persistence, messaging infrastructure, or OAuth/OIDC protocol adapters;
 - Gateway does not depend on IAM implementation classes;
 - shared messaging contracts remain framework independent;
-- the shared security starter remains reusable and does not depend on deployable services.
+- the shared security library remains independent from Spring Boot and deployable services.
 
 Add a rule in the owning module when introducing a durable boundary. Do not freeze a violation; fix the dependency direction.
 

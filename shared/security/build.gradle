@@ -3,12 +3,11 @@ plugins {
 }
 
 dependencies {
-    api libs.springBootStarterSecurity
-    api libs.springBootStarterSecurityOauth2ResourceServer
+    api libs.springSecurityCore
+    api libs.springSecurityOauth2Jose
+    api libs.springSecurityOauth2ResourceServer
 
-    implementation libs.springBootAutoconfigure
-
-    testImplementation libs.springBootStarterTest
-    testImplementation libs.springBootStarterSecurityTest
+    testImplementation libs.junitJupiter
+    testImplementation libs.assertjCore
     testRuntimeOnly libs.junitPlatformLauncher
 }

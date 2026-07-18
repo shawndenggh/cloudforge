@@ -19,7 +19,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 
-final class SecurityContextCurrentTenant implements CurrentTenant {
+public final class SecurityContextCurrentTenant implements CurrentTenant {
 
 	@Override
 	public TenantId requireTenantId() {
