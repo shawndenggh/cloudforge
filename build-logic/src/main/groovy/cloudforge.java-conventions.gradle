@@ -1,6 +1,7 @@
 import org.gradle.api.artifacts.VersionCatalogsExtension
 
 plugins {
+    id 'java'
     id 'io.spring.dependency-management'
     id 'io.spring.javaformat'
     id 'com.diffplug.spotless'
@@ -8,11 +9,7 @@ plugins {
     id 'net.ltgt.errorprone'
 }
 
-if (!pluginManager.hasPlugin('java')) {
-    throw new GradleException('Apply the java or java-library plugin before cloudforge.java-conventions.')
-}
-
-def libraries = extensions.getByType(VersionCatalogsExtension).named('libs')
+def libraries = rootProject.extensions.getByType(VersionCatalogsExtension).named('libs')
 def springBootDependencies = libraries.findLibrary('springBootDependencies').get()
 def springCloudDependencies = libraries.findLibrary('springCloudDependencies').get()
 
@@ -30,13 +27,16 @@ dependencyManagement {
 }
 
 dependencies {
-    add(pluginManager.hasPlugin('java-library') ? 'api' : 'implementation',
-            libraries.findLibrary('jspecify').get())
     checkstyle libraries.findLibrary('checkstyle').get()
     checkstyle libraries.findLibrary('springJavaFormatCheckstyle').get()
     errorprone libraries.findLibrary('errorProneCore').get()
     errorprone libraries.findLibrary('nullAway').get()
     testImplementation libraries.findLibrary('archunitJunit5').get()
+}
+
+afterEvaluate {
+    dependencies.add(pluginManager.hasPlugin('java-library') ? 'api' : 'implementation',
+            libraries.findLibrary('jspecify').get())
 }
 
 spotless {

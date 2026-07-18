@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.spotless)
+    id 'cloudforge.java-conventions' apply false
 }
 
 allprojects {
@@ -8,6 +9,10 @@ allprojects {
 }
 
 def moduleProjects = subprojects.findAll { it.buildFile.exists() }
+
+configure(moduleProjects) {
+    apply plugin: 'cloudforge.java-conventions'
+}
 
 spotless {
     format('repository') {

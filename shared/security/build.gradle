@@ -1,6 +1,5 @@
 plugins {
     id 'java-library'
-    id 'cloudforge.java-conventions'
 }
 
 dependencies {

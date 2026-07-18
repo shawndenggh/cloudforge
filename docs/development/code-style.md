@@ -4,7 +4,7 @@ CloudForge uses an executable quality gate. Human review may add stricter feedba
 
 ## Build conventions
 
-Every Java module applies `cloudforge.java-conventions` after `java` or `java-library`. The convention plugin in `build-logic/` owns the shared Java toolchain, dependency BOMs, formatting, static analysis, null safety, and architecture-test dependencies. Dependency coordinates and versions remain in `gradle/libs.versions.toml`; the root build only coordinates repository-wide tasks.
+The root build applies `cloudforge.java-conventions` to every module, providing the default `java` plugin and shared quality rules. Each project below `shared/` explicitly applies `java-library`. The convention plugin in `build-logic/` owns the shared Java toolchain, dependency BOMs, formatting, static analysis, null safety, and architecture-test dependencies. Dependency coordinates and versions remain in `gradle/libs.versions.toml`; module builds declare only their framework or library plugin and application dependencies.
 
 ## Java style
 
