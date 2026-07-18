@@ -1,5 +1,7 @@
 plugins {
-    id 'org.springframework.boot'
+    id 'java'
+    alias(libs.plugins.springBoot)
+    id 'cloudforge.java-conventions'
 }
 
 dependencies {

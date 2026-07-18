@@ -1,9 +1,5 @@
 plugins {
-    alias(libs.plugins.springBoot) apply false
-    alias(libs.plugins.springDependencyManagement) apply false
-    alias(libs.plugins.springJavaFormat) apply false
     alias(libs.plugins.spotless)
-    alias(libs.plugins.errorProne) apply false
 }
 
 allprojects {
@@ -11,105 +7,17 @@ allprojects {
     version = '0.1.0-SNAPSHOT'
 }
 
-def libraries = libs
+def moduleProjects = subprojects.findAll { it.buildFile.exists() }
 
 spotless {
     format('repository') {
         target '.editorconfig', '.env.example', 'LICENSE', 'Makefile', '*.md', '*.gradle',
                 '*.properties', '*.toml', '*.yaml', '*.yml', '.github/**/*.yml',
-                'config/**/*.xml', 'config/**/*.txt', 'docs/**/*.md', 'gradle/**/*.toml'
+                'build-logic/**/*.gradle', 'config/**/*.xml', 'config/**/*.txt',
+                'docs/**/*.md', 'gradle/**/*.toml'
         targetExclude '.gradle/**', '**/build/**'
         trimTrailingWhitespace()
         endWithNewline()
-    }
-}
-
-configure(subprojects.findAll { it.buildFile.exists() }) {
-    if (path.startsWith(':shared:')) {
-        apply plugin: 'java-library'
-    }
-    else {
-        apply plugin: 'java'
-    }
-    apply plugin: 'io.spring.dependency-management'
-    apply plugin: 'io.spring.javaformat'
-    apply plugin: 'com.diffplug.spotless'
-    apply plugin: 'checkstyle'
-    apply plugin: 'net.ltgt.errorprone'
-
-    java {
-        toolchain {
-            languageVersion = JavaLanguageVersion.of(25)
-        }
-    }
-
-    dependencyManagement {
-        imports {
-            mavenBom libraries.springBootDependencies.get().toString()
-            mavenBom libraries.springCloudDependencies.get().toString()
-        }
-    }
-
-    dependencies {
-        if (path.startsWith(':shared:')) {
-            api libraries.jspecify
-        }
-        else {
-            implementation libraries.jspecify
-        }
-        checkstyle libraries.checkstyle
-        checkstyle libraries.springJavaFormatCheckstyle
-        errorprone libraries.errorProneCore
-        errorprone libraries.nullAway
-        testImplementation libraries.archunitJunit5
-    }
-
-    spotless {
-        java {
-            targetExclude 'src/**/package-info.java'
-            licenseHeaderFile rootProject.file('config/license/java-header.txt')
-        }
-        format('packageInfo') {
-            target 'src/**/package-info.java'
-            licenseHeaderFile rootProject.file('config/license/java-header.txt'), '(?=/\\*\\*)'
-        }
-    }
-
-    checkstyle {
-        configFile = rootProject.file('config/checkstyle/checkstyle.xml')
-        maxWarnings = 0
-    }
-
-    tasks.withType(JavaCompile).configureEach {
-        options.compilerArgs.addAll(['-parameters', '-Xlint:all', '-Werror'])
-        options.encoding = 'UTF-8'
-        options.errorprone {
-            disableWarningsInGeneratedCode = true
-        }
-        if (name == 'compileJava') {
-            options.errorprone {
-                error('NullAway')
-                option('NullAway:OnlyNullMarked', 'true')
-                option('NullAway:JSpecifyMode', 'true')
-            }
-        }
-        else {
-            options.errorprone.disable('NullAway')
-        }
-    }
-
-    tasks.withType(Test).configureEach {
-        useJUnitPlatform()
-    }
-
-    tasks.named('spotlessJava').configure {
-        mustRunAfter tasks.named('formatMain')
-        mustRunAfter tasks.named('formatTest')
-    }
-
-    tasks.named('spotlessPackageInfo').configure {
-        mustRunAfter tasks.named('formatMain')
-        mustRunAfter tasks.named('formatTest')
     }
 }
 
@@ -117,13 +25,14 @@ tasks.register('formatAll') {
     group = 'formatting'
     description = 'Applies repository, license header, and Spring Java formatting rules.'
     dependsOn tasks.named('spotlessApply')
-    dependsOn subprojects.findAll { it.buildFile.exists() }.collect { it.tasks.named('spotlessApply') }
-    dependsOn subprojects.findAll { it.buildFile.exists() }.collect { it.tasks.named('format') }
+    dependsOn moduleProjects.collect { it.tasks.named('spotlessApply') }
+    dependsOn moduleProjects.collect { it.tasks.named('format') }
 }
 
 tasks.register('qualityCheck') {
     group = 'verification'
     description = 'Runs every formatting, static analysis, architecture, and test gate.'
     dependsOn tasks.named('spotlessCheck')
-    dependsOn subprojects.findAll { it.buildFile.exists() }.collect { it.tasks.named('check') }
+    dependsOn moduleProjects.collect { it.tasks.named('check') }
+    dependsOn gradle.includedBuild('build-logic').task(':check')
 }

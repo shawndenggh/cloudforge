@@ -37,10 +37,11 @@ springCloudStarterGatewayServerWebmvc = { module = "org.springframework.cloud:sp
 flywayDatabasePostgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 postgresql = { module = "org.postgresql:postgresql" }
 junitPlatformLauncher = { module = "org.junit.platform:junit-platform-launcher" }
+springDependencyManagementGradlePlugin = { module = "io.spring.dependency-management:io.spring.dependency-management.gradle.plugin", version.ref = "springDependencyManagement" }
+springJavaFormatGradlePlugin = { module = "io.spring.javaformat:io.spring.javaformat.gradle.plugin", version.ref = "springJavaFormat" }
+spotlessGradlePlugin = { module = "com.diffplug.spotless:com.diffplug.spotless.gradle.plugin", version.ref = "spotless" }
+errorProneGradlePlugin = { module = "net.ltgt.errorprone:net.ltgt.errorprone.gradle.plugin", version.ref = "errorPronePlugin" }
 
 [plugins]
 springBoot = { id = "org.springframework.boot", version.ref = "springBoot" }
-springDependencyManagement = { id = "io.spring.dependency-management", version.ref = "springDependencyManagement" }
-springJavaFormat = { id = "io.spring.javaformat", version.ref = "springJavaFormat" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
-errorProne = { id = "net.ltgt.errorprone", version.ref = "errorPronePlugin" }

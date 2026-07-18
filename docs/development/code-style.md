@@ -2,6 +2,10 @@
 
 CloudForge uses an executable quality gate. Human review may add stricter feedback, but it must not replace or contradict the checked-in configuration. Every developer and AI agent must run `make format` followed by `make check` before handing off a change.
 
+## Build conventions
+
+Every Java module applies `cloudforge.java-conventions` after `java` or `java-library`. The convention plugin in `build-logic/` owns the shared Java toolchain, dependency BOMs, formatting, static analysis, null safety, and architecture-test dependencies. Dependency coordinates and versions remain in `gradle/libs.versions.toml`; the root build only coordinates repository-wide tasks.
+
 ## Java style
 
 Java follows the Spring team style through Spring Java Format and its Checkstyle rules:
