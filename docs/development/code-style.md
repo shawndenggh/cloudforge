@@ -1,60 +1,119 @@
-# Code style and quality gate
+# Mandatory code style and quality standards
 
-CloudForge uses an executable quality gate. Human review may add stricter feedback, but it must not replace or contradict the checked-in configuration. Every developer and AI agent must run `make format` followed by `make check` before handing off a change.
+This document is mandatory for every human and AI contributor to CloudForge. It applies to production code, tests, build logic, configuration, and documentation. A change is not ready for review, handoff, or merge until it satisfies this document and the executable quality gate.
 
-## Build conventions
+The words **must**, **must not**, **should**, and **should not** are normative. Checked-in configuration is the source of truth. If this document and an executable rule disagree, contributors must follow the executable rule and correct the documentation in the same change.
 
-The root build applies `cloudforge.java-conventions` to every module, providing the default `java` plugin and shared quality rules. Each project below `shared/` explicitly applies `java-library`. The independent `build-logic` build depends on framework-neutral build tools for the Java toolchain, Spotless, Checkstyle, Error Prone, NullAway, and ArchUnit; Spring Java Format is its sole Spring-owned build dependency. Application coordinates and Spring platform versions live in `gradle/libs.versions.toml`; `build-logic/gradle/libs.versions.toml` independently contains build-tool dependencies, including the formatter version. Module builds declare only their framework or library plugin and application dependencies.
+## Required workflow
 
-## Java style
+Every contributor must run the following commands from the repository root before handing off a change:
 
-Java follows the Spring team style through Spring Java Format and is checked with framework-neutral Checkstyle rules:
+```bash
+make format
+make check
+```
+
+`make format` applies repository formatting, Spring Java Format, and Java license headers. `make check` is the complete merge gate: formatting, Checkstyle, Error Prone, NullAway/JSpecify, ArchUnit, and tests. A targeted module test is useful during development but does not replace the complete merge gate.
+
+Contributors must not commit formatter output separately from the change that required it, and must not hand-edit generated formatter output to fight the configured tools.
+
+## Repository and build conventions
+
+- The root build must apply `cloudforge.java-conventions` to every Java subproject. Individual modules must not repeat that plugin declaration.
+- Every project below `shared/` must explicitly apply `java-library` because shared modules publish library APIs rather than deployable applications.
+- External application and library coordinates must use aliases from `gradle/libs.versions.toml`. Module build files must not contain hard-coded external dependency versions.
+- Build-tool coordinates must remain in `build-logic/gradle/libs.versions.toml`. Spring Java Format is the only Spring-owned build dependency permitted in `build-logic`.
+- A module must declare its own framework platform when it needs one. Deployable services own their Spring Boot or Spring Cloud platforms; shared libraries must not inherit those platforms from the root build.
+- Build files must contain only the plugins, platforms, project dependencies, and external dependencies required by that module.
+
+## Dependency boundaries
+
+- Modules below `services/` may use Spring Boot starters and application infrastructure.
+- Modules below `shared/` must not apply the Spring Boot plugin or depend on `spring-boot-starter-*` artifacts.
+- A shared module may use a directly required lower-level Spring Framework or Spring Security library, but it must remain independently usable and must not depend on a deployable service.
+- Shared APIs must not expose service implementation types.
+- Code must declare the dependencies it uses directly and must not rely on an unrelated dependency to provide a transitive library accidentally.
+- Dependency versions must be updated centrally through the appropriate version catalog and verified with `make check`.
+
+## Java formatting and naming
+
+Spring Java Format is authoritative for Java layout. Contributors must follow these additional rules:
 
 - use tabs for Java indentation and spaces only for alignment;
-- keep lines within 120 characters where practical;
+- keep lines within 120 characters unless the formatter produces a longer line;
 - do not use wildcard imports;
 - avoid static imports in production code; focused test assertions may use them;
+- use lower-case package names and standard Java type, method, field, and constant naming;
 - name JUnit test classes with the `Tests` suffix;
 - arrange a class so its public API reads before implementation details;
 - prefer explicit local types in production code; use `var` in tests only when it improves readability.
 
-Run `make format` to apply the source formatter and required license header. IDE formatting is optional; the Gradle tasks are authoritative.
+IDE formatting is optional. The Gradle formatter and checks are authoritative.
+
+## Non-Java formatting
+
+All text files must use UTF-8, LF line endings, a final newline, and no trailing whitespace. `.editorconfig` defines the editor-facing rules, while Spotless enforces repository-level whitespace rules.
+
+| Files | Indentation |
+| --- | --- |
+| Java | Tabs, width 4 |
+| Gradle and Groovy | 4 spaces |
+| JSON, Markdown, TOML, YAML | 2 spaces |
+| XML and properties | 4 spaces |
+| Makefile recipes | Tabs, width 4 |
+
+Contributors must preserve valid syntax and established key ordering when editing structured configuration. Formatting must not be used to rewrite unrelated files.
 
 ## License headers
 
-The project is licensed under Apache License 2.0. Every Java source file carries the full header from `config/license/java-header.txt`:
+Every Java source file must carry the Apache 2.0 header generated from `config/license/java-header.txt`, including:
 
 ```text
 Copyright 2026-present Shawn Deng and CloudForge contributors.
 ```
 
-Do not copy or hand-edit the header in individual files. Change the template and run `make format` when project ownership or licensing changes.
+Contributors must not copy or hand-edit the header in individual files. Change the template and run `make format` when project ownership or licensing changes.
 
 ## Null safety
 
-Production packages are non-null by default with JSpecify `@NullMarked`. Mark only genuine absence with `@Nullable`; do not use `Optional` for fields or method parameters merely to silence analysis. NullAway runs as an Error Prone error on production compilation. Test source is excluded from NullAway so tests can exercise invalid and nullable inputs directly.
+- Every production package must be non-null by default with JSpecify `@NullMarked`.
+- Only genuine absence may be marked with `@Nullable`.
+- Code must not use `Optional` for fields or method parameters merely to silence null analysis.
+- Production compilation must pass NullAway in JSpecify mode without package-wide exclusions.
+- Tests may exercise invalid and nullable inputs; test source remains outside NullAway enforcement.
 
-## Architecture rules
+## Tests and architecture
 
-ArchUnit tests are hard gates with no frozen baseline. Existing code and every new change must satisfy the current rules. The initial rules preserve these dependency directions:
+- JUnit 5 is the default test framework.
+- Tests must be placed under the owning module and should verify behavior through the module interface.
+- New behavior must include proportionate automated coverage.
+- ArchUnit rules are hard gates with no frozen violation baseline.
+- IAM domain packages must not depend on Spring, persistence, messaging infrastructure, or OAuth/OIDC protocol adapters.
+- Gateway must not depend on IAM implementation classes.
+- Shared messaging contracts must remain framework independent.
+- Shared security must remain independent from Spring Boot and deployable services.
+- A durable new dependency boundary must be protected by an ArchUnit rule in the owning module.
 
-- IAM domain packages do not depend on Spring, persistence, messaging infrastructure, or OAuth/OIDC protocol adapters;
-- Gateway does not depend on IAM implementation classes;
-- shared messaging contracts remain framework independent;
-- the shared security library remains independent from Spring Boot and deployable services.
+## Suppressions and prohibited bypasses
 
-Add a rule in the owning module when introducing a durable boundary. Do not freeze a violation; fix the dependency direction.
+A diagnostic may be suppressed only on the narrowest declaration, with the exact rule name and a comment explaining why the code is safe.
 
-## Suppressions and generated code
+Contributors must not:
 
-Suppress a diagnostic only at the narrowest declaration, naming the exact rule and documenting why the code is safe. Broad suppressions such as `all`, disabling Error Prone/NullAway for a package, or formatter-off regions are not accepted. Generated source may receive a scoped exclusion only when generation is introduced and the generated directory is unambiguous.
+- disable or weaken Checkstyle, Error Prone, NullAway, Spotless, Spring Java Format, or ArchUnit to make a change pass;
+- add a frozen architecture baseline or broad warning suppression;
+- use formatter-off regions for ordinary source code;
+- exclude handwritten source from the quality gate;
+- merge or hand off a change while `make check` fails.
 
-## Commands
+Generated source may receive a scoped exclusion only when generation is introduced, the generated directory is unambiguous, and handwritten source remains fully checked.
+
+## Command reference
 
 ```bash
 make format  # Apply repository formatting, Java formatting, and Java headers
-make check   # Formatting, Checkstyle, Error Prone, NullAway, ArchUnit, and tests
-make test    # Run tests only
+make check   # Run the complete mandatory quality gate
+make test    # Run tests without replacing the complete quality gate
 ```
 
 `make check` must pass locally and in GitHub Actions before merge.
