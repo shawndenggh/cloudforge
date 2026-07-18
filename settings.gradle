@@ -16,6 +16,11 @@ dependencyResolutionManagement {
     repositories {
         mavenCentral()
     }
+    versionCatalogs {
+        buildLibs {
+            from(files('build-logic/gradle/libs.versions.toml'))
+        }
+    }
 }
 
 rootProject.name = 'cloudforge'

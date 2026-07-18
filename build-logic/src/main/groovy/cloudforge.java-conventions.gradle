@@ -2,16 +2,13 @@ import org.gradle.api.artifacts.VersionCatalogsExtension
 
 plugins {
     id 'java'
-    id 'io.spring.dependency-management'
     id 'io.spring.javaformat'
     id 'com.diffplug.spotless'
     id 'checkstyle'
     id 'net.ltgt.errorprone'
 }
 
-def libraries = rootProject.extensions.getByType(VersionCatalogsExtension).named('libs')
-def springBootDependencies = libraries.findLibrary('springBootDependencies').get()
-def springCloudDependencies = libraries.findLibrary('springCloudDependencies').get()
+def libraries = rootProject.extensions.getByType(VersionCatalogsExtension).named('buildLibs')
 
 java {
     toolchain {
@@ -19,31 +16,14 @@ java {
     }
 }
 
-dependencyManagement {
-    imports {
-        mavenBom springBootDependencies.get().toString()
-        mavenBom springCloudDependencies.get().toString()
-    }
-}
-
 dependencies {
     checkstyle libraries.findLibrary('checkstyle').get()
-    checkstyle libraries.findLibrary('springJavaFormatCheckstyle').get()
     errorprone libraries.findLibrary('errorProneCore').get()
     errorprone libraries.findLibrary('nullAway').get()
     testImplementation libraries.findLibrary('archunitJunit5').get()
 }
 
 afterEvaluate {
-    if (path.startsWith(':shared:')) {
-        def bootDependencies = configurations.collectMany { it.dependencies }
-            .findAll { it.group == 'org.springframework.boot' }
-            .collect { "${it.group}:${it.name}" }
-            .unique()
-        if (!bootDependencies.empty) {
-            throw new GradleException("Shared modules cannot depend on Spring Boot: ${bootDependencies.join(', ')}")
-        }
-    }
     dependencies.add(pluginManager.hasPlugin('java-library') ? 'api' : 'implementation',
             libraries.findLibrary('jspecify').get())
 }

@@ -3,6 +3,9 @@ plugins {
 }
 
 dependencies {
+    implementation platform(libs.springBootDependencies)
+    implementation platform(libs.springCloudDependencies)
+
     implementation libs.springBootStarterActuator
     implementation libs.springCloudStarterGatewayServerWebmvc
 

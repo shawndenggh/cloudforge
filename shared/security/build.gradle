@@ -3,6 +3,8 @@ plugins {
 }
 
 dependencies {
+    api platform(libs.springSecurityBom)
+
     api libs.springSecurityCore
     api libs.springSecurityOauth2Jose
     api libs.springSecurityOauth2ResourceServer

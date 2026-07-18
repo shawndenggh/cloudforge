@@ -1,25 +1,14 @@
 [versions]
 springBoot = "4.1.0"
 springCloud = "2025.1.2"
-springDependencyManagement = "1.1.7"
-springJavaFormat = "0.0.47"
-spotless = "8.8.0"
-errorPronePlugin = "5.1.0"
-errorProne = "2.50.0"
-nullAway = "0.13.7"
-jspecify = "1.0.0"
-checkstyle = "10.26.1"
-archunit = "1.4.2"
+springSecurity = "7.1.0"
+junit = "6.0.3"
+assertj = "3.27.7"
 
 [libraries]
 springBootDependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "springBoot" }
 springCloudDependencies = { module = "org.springframework.cloud:spring-cloud-dependencies", version.ref = "springCloud" }
-springJavaFormatCheckstyle = { module = "io.spring.javaformat:spring-javaformat-checkstyle", version.ref = "springJavaFormat" }
-errorProneCore = { module = "com.google.errorprone:error_prone_core", version.ref = "errorProne" }
-nullAway = { module = "com.uber.nullaway:nullaway", version.ref = "nullAway" }
-jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
-checkstyle = { module = "com.puppycrawl.tools:checkstyle", version.ref = "checkstyle" }
-archunitJunit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+springSecurityBom = { module = "org.springframework.security:spring-security-bom", version.ref = "springSecurity" }
 springBootStarterActuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
 springBootStarterAmqp = { module = "org.springframework.boot:spring-boot-starter-amqp" }
 springBootStarterDataJpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
@@ -34,17 +23,12 @@ springBootStarterWebmvc = { module = "org.springframework.boot:spring-boot-start
 springCloudStarterGatewayServerWebmvc = { module = "org.springframework.cloud:spring-cloud-starter-gateway-server-webmvc" }
 flywayDatabasePostgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 postgresql = { module = "org.postgresql:postgresql" }
-junitPlatformLauncher = { module = "org.junit.platform:junit-platform-launcher" }
-junitJupiter = { module = "org.junit.jupiter:junit-jupiter" }
-assertjCore = { module = "org.assertj:assertj-core" }
+junitPlatformLauncher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
+junitJupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+assertjCore = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 springSecurityCore = { module = "org.springframework.security:spring-security-core" }
 springSecurityOauth2Jose = { module = "org.springframework.security:spring-security-oauth2-jose" }
 springSecurityOauth2ResourceServer = { module = "org.springframework.security:spring-security-oauth2-resource-server" }
-springDependencyManagementGradlePlugin = { module = "io.spring.dependency-management:io.spring.dependency-management.gradle.plugin", version.ref = "springDependencyManagement" }
-springJavaFormatGradlePlugin = { module = "io.spring.javaformat:io.spring.javaformat.gradle.plugin", version.ref = "springJavaFormat" }
-spotlessGradlePlugin = { module = "com.diffplug.spotless:com.diffplug.spotless.gradle.plugin", version.ref = "spotless" }
-errorProneGradlePlugin = { module = "net.ltgt.errorprone:net.ltgt.errorprone.gradle.plugin", version.ref = "errorPronePlugin" }
 
 [plugins]
 springBoot = { id = "org.springframework.boot", version.ref = "springBoot" }
-spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }

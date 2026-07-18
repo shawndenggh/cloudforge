@@ -4,6 +4,7 @@ plugins {
 
 dependencies {
     implementation project(':shared:messaging')
+    implementation platform(libs.springBootDependencies)
 
     implementation libs.springBootStarterActuator
     implementation libs.springBootStarterAmqp

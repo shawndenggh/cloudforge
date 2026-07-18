@@ -4,11 +4,11 @@ CloudForge uses an executable quality gate. Human review may add stricter feedba
 
 ## Build conventions
 
-The root build applies `cloudforge.java-conventions` to every module, providing the default `java` plugin and shared quality rules. Each project below `shared/` explicitly applies `java-library`. The convention plugin in `build-logic/` owns the shared Java toolchain, dependency BOMs, formatting, static analysis, null safety, and architecture-test dependencies. Dependency coordinates and versions remain in `gradle/libs.versions.toml`; module builds declare only their framework or library plugin and application dependencies.
+The root build applies `cloudforge.java-conventions` to every module, providing the default `java` plugin and shared quality rules. Each project below `shared/` explicitly applies `java-library`. The independent `build-logic` build depends on framework-neutral build tools for the Java toolchain, Spotless, Checkstyle, Error Prone, NullAway, and ArchUnit; Spring Java Format is its sole Spring-owned build dependency. Application coordinates and Spring platform versions live in `gradle/libs.versions.toml`; `build-logic/gradle/libs.versions.toml` independently contains build-tool dependencies, including the formatter version. Module builds declare only their framework or library plugin and application dependencies.
 
 ## Java style
 
-Java follows the Spring team style through Spring Java Format and its Checkstyle rules:
+Java follows the Spring team style through Spring Java Format and is checked with framework-neutral Checkstyle rules:
 
 - use tabs for Java indentation and spaces only for alignment;
 - keep lines within 120 characters where practical;

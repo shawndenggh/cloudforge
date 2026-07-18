@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.spotless)
+    alias(buildLibs.plugins.spotless)
     id 'cloudforge.java-conventions' apply false
 }
 
@@ -18,7 +18,7 @@ spotless {
     format('repository') {
         target '.editorconfig', '.env.example', 'LICENSE', 'Makefile', '*.md', '*.gradle',
                 '*.properties', '*.toml', '*.yaml', '*.yml', '.github/**/*.yml',
-                'build-logic/**/*.gradle', 'config/**/*.xml', 'config/**/*.txt',
+                'build-logic/**/*.gradle', 'build-logic/**/*.toml', 'config/**/*.xml', 'config/**/*.txt',
                 'docs/**/*.md', 'gradle/**/*.toml'
         targetExclude '.gradle/**', '**/build/**'
         trimTrailingWhitespace()

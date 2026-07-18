@@ -1,0 +1,3 @@
+# Executable Java code quality gate
+
+CloudForge adopts Spring Java Format and framework-neutral Checkstyle rules as its Java style, with Spotless enforcing the Apache 2.0 source header, Error Prone plus NullAway/JSpecify enforcing compile-time correctness, and ArchUnit protecting module boundaries. Spring Java Format is the only Spring-owned dependency in the independent `build-logic` build; Spring dependency-management plugins and application framework libraries remain outside it. These checks apply to all current production code with no legacy or architecture baseline and are required by `make check` and CI; this favors deterministic contributions and reusable build logic over review-only conventions.
