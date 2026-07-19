@@ -1,3 +1,0 @@
-# Explicit concurrent and ordered subscriptions
-
-Each CloudForge consumer explicitly selects either a `CONCURRENT` or `ORDERED` subscription. Concurrent subscriptions use competing consumers and tolerate reordering. Ordered subscriptions use a quorum queue with Single Active Consumer and prefetch one, require producer-ordered `subjectVersion` metadata, and stop on a version gap. After an unrecoverable ordered-message failure, the subscription remains paused until the DLQ message is corrected and replayed, so later events cannot silently overtake it. Key-partitioned ordered consumption is deferred until throughput demonstrates the need.

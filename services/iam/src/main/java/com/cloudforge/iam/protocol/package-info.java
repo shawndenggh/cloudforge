@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 /**
- * Adapts IAM capabilities to OAuth 2.1 and OpenID Connect protocol endpoints.
+ * Adapts IAM capabilities to registration, password login, and Session endpoints.
  */
 @NullMarked
 package com.cloudforge.iam.protocol;

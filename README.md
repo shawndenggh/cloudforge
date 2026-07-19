@@ -16,14 +16,14 @@ CloudForge is a production-oriented, multi-tenant foundation for Spring-based di
 ```text
 services/
 ├── gateway/       Thin Spring Cloud Gateway Server MVC edge application
-└── iam/           IAM bounded context and OAuth/OIDC authorization server
+└── iam/           Global User identity, Session, and Tenant lifecycle
 
 shared/
-├── security/      Tenant-aware Resource Server integration
+├── security/      Session User and Current Tenant context seam
 └── messaging/     Versioned Integration Event envelope
 ```
 
-`iam` is currently the only domain service. User identity, credentials, Tenants, Memberships, roles, and permissions are internal IAM modules rather than independent network services. `gateway` is a deployable edge application, not a bounded context. See [the module map](docs/architecture/modules.md) and [ADR 0029](docs/adr/0029-minimal-initial-service-topology.md).
+`iam` and `gateway` are the currently implemented applications. The accepted organization-directory target adds `organization-service` as an independently owned domain application and evolves Gateway into the MVP BFF. See the [module map](docs/architecture/modules.md), [用户与身份-需求文档](docs/product/user-identity-prd.md), [用户与身份-技术设计与开发手册](docs/architecture/user-identity-technical-design.md), [通讯录-需求文档](docs/product/organization-directory-prd.md), and [通讯录-技术设计与开发手册](docs/architecture/organization-service-technical-design.md).
 
 ## Build
 
@@ -41,7 +41,7 @@ make format
 make check
 ```
 
-`make check` is the merge gate: it verifies repository and Java formatting, the Apache 2.0 source header, Checkstyle, Error Prone, NullAway/JSpecify, ArchUnit boundaries, and tests. See the [code style and quality gate](docs/development/code-style.md) and [ADR 0030](docs/adr/0030-executable-java-code-quality-gate.md).
+`make check` is the merge gate: it verifies repository and Java formatting, the Apache 2.0 source header, Checkstyle, Error Prone, NullAway/JSpecify, ArchUnit boundaries, and tests. See the [code style and quality gate](docs/development/code-style.md).
 
 Useful module tasks:
 
@@ -99,8 +99,8 @@ The default local endpoints are:
 - IAM: `http://localhost:9000`
 - Gateway: `http://localhost:8080`
 
-The IAM module currently establishes its runtime dependencies and internal package boundaries; user persistence, registered OIDC clients, signing keys, and production login behavior will be added as tested domain slices rather than insecure placeholder implementations.
+The IAM module currently establishes its runtime dependencies and internal package boundaries. User persistence, email verification, password login, Redis Session behavior, and platform administration will be added as tested domain slices following the accepted user-and-identity design. Third-party login and access tokens are outside the MVP scope.
 
-## Architecture decisions
+## Product and technical decisions
 
-Confirmed decisions live under [`docs/adr`](docs/adr), and the multi-tenant ubiquitous language lives in [`CONTEXT.md`](CONTEXT.md). New services must own a concrete business capability and data model; infrastructure reuse alone is not a reason to create a network boundary.
+Final product decisions live under [`docs/product`](docs/product), final technical decisions live under [`docs/architecture`](docs/architecture), and the multi-tenant ubiquitous language lives in [`CONTEXT.md`](CONTEXT.md). Standalone ADRs are not used. New services must own a concrete business capability and data model; infrastructure reuse alone is not a reason to create a network seam.

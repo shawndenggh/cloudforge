@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-CloudForge is a Java 25, Spring Boot 4.1, Gradle Groovy multi-project repository. Deployable applications live under `services/`; reusable Java modules live under `shared/`; architectural decisions live under `docs/adr/`. The skill catalog remains under `.agents/skills/`, with `.claude/skills/` symlinking to canonical skill directories. `skills-lock.json` records installed skill sources and hashes.
+CloudForge is a Java 25, Spring Boot 4.1, Gradle Groovy multi-project repository. Deployable applications live under `services/`; reusable Java modules live under `shared/`; final product decisions live under `docs/product/`, and final technical decisions live under `docs/architecture/`. Do not create standalone ADRs; update the relevant PRD and technical design instead. The skill catalog remains under `.agents/skills/`, with `.claude/skills/` symlinking to canonical skill directories. `skills-lock.json` records installed skill sources and hashes.
 
 ## Build, Test, and Development Commands
 

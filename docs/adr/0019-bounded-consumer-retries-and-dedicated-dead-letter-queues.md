@@ -1,3 +1,0 @@
-# Bounded consumer retries and dedicated dead-letter queues
-
-CloudForge consumers perform at most three short, exponentially backed-off processing attempts before rejecting a failed message without requeue. RabbitMQ then transfers it with at-least-once dead-lettering to a dedicated quorum DLQ owned by that logical consumer; DLQ depth raises an alert and messages are replayed after the cause is corrected. A broker delivery limit of five protects against crash-driven redelivery loops, Inbox deduplication makes replay safe, and long-running business recovery is modeled as Saga state rather than infinite message retries.

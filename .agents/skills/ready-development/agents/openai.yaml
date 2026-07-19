@@ -1,0 +1,6 @@
+interface:
+  display_name: "Ready Development"
+  short_description: "Turn requirements into reviewable development issues"
+  default_prompt: "Use $ready-development to turn this PRD or feature description into a codebase-grounded technical design and small implementation issues."
+policy:
+  allow_implicit_invocation: false

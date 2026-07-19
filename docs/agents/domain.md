@@ -1,41 +1,28 @@
 # Domain Docs
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+How engineering work should consume CloudForge's final product and technical documentation.
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists — it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`** — read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+- **`CONTEXT.md`** for the ubiquitous language.
+- The relevant **PRD under `docs/product/`** for user behavior, scope, and acceptance criteria.
+- The relevant **technical design under `docs/architecture/`** for data ownership, interfaces, security, migration, and tests.
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
+If a feature has no PRD or technical design, proceed from current code and Issues. Create the missing document only when the work needs a new product or technical decision.
 
 ## File structure
 
-Single-context repo (most repos):
-
-```
+```text
 /
 ├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
-```
-
-Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
-
-```
-/
-├── CONTEXT-MAP.md
-├── docs/adr/                          ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── billing/
-        ├── CONTEXT.md
-        └── docs/adr/
+└── docs/
+    ├── product/
+    │   └── <feature>-prd.md
+    ├── architecture/
+    │   └── <feature>-technical-design.md
+    └── templates/
+        ├── prd-template.md
+        └── technical-design-template.md
 ```
 
 ## Use the glossary's vocabulary
@@ -44,8 +31,10 @@ When your output names a domain concept (in an issue title, a refactor proposal,
 
 If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
-## Flag ADR conflicts
+## Resolve documentation conflicts
 
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
+The PRD is authoritative for product scope and externally observable behavior. The technical design is authoritative for implementation decisions. If code or a proposed change contradicts either document, surface the conflict explicitly and update the owning document after the decision is confirmed:
 
-> _Contradicts ADR-0007 (event-sourced orders) — but worth reopening because…_
+> _Contradicts FR-007 and the current technical design. Confirm whether the requirement changed before implementation._
+
+CloudForge does not use standalone ADRs. Durable decisions belong in the relevant PRD or technical design so developers have one source of truth.

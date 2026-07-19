@@ -1,3 +1,0 @@
-# Application Outbox Relay with PostgreSQL leadership
-
-Each CloudForge service writes business state and `outbox_event` rows in one local transaction, then publishes them through the shared application Outbox Relay rather than Debezium or Kafka Connect. All service replicas may host the Relay, but a PostgreSQL advisory lock elects one active publisher per service; it publishes monotonically ordered batches, waits for RabbitMQ publisher confirms, and only then marks rows published. Failover may republish an event, so delivery remains at least once and consumers deduplicate through Inbox. CDC and subject-partitioned relays are deferred until measured throughput requires them.

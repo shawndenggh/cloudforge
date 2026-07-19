@@ -1,3 +1,0 @@
-# Redis is not a system of record
-
-CloudForge uses Redis only for reconstructable caches and bounded temporary state such as BFF sessions, rate limits, short-lived idempotency markers, verification codes, and narrowly scoped revocation data. PostgreSQL remains the system of record; Redis must not hold irreplaceable domain state or provide correctness-critical distributed locking for money, inventory, authorization ownership, or cross-service transactions. Tenant-scoped keys always include an explicit environment, service, Tenant, purpose, and key namespace, while platform-scoped keys explicitly use `platform`.
