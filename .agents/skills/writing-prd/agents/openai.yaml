@@ -1,0 +1,4 @@
+interface:
+  display_name: "Writing PRD"
+  short_description: "Clarify product needs and write focused PRDs"
+  default_prompt: "Use $writing-prd to clarify this product idea one decision at a time and write a focused PRD."
