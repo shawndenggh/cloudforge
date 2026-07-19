@@ -23,8 +23,6 @@ shared/
 └── messaging/     Versioned Integration Event envelope
 ```
 
-`iam` and `gateway` are the currently implemented applications. The accepted organization-directory target adds `organization-service` as an independently owned domain application and evolves Gateway into the MVP BFF. See the [module map](docs/architecture/modules.md), [用户与身份-需求文档](docs/product/user-identity-prd.md), [用户与身份-技术设计与开发手册](docs/architecture/user-identity-technical-design.md), [通讯录-需求文档](docs/product/organization-directory-prd.md), and [通讯录-技术设计与开发手册](docs/architecture/organization-service-technical-design.md).
-
 ## Build
 
 The repository includes an [SDKMAN environment](.sdkmanrc) pinned to Temurin Java 25. Developers with SDKMAN installed can install and activate it from the repository root:
