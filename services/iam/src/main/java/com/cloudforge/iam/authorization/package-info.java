@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 /**
- * Owns permission definitions, tenant roles, platform roles, and permission expansion
- * inside IAM.
+ * Owns platform roles and their assignment to global users inside IAM.
  */
 @NullMarked
 package com.cloudforge.iam.authorization;

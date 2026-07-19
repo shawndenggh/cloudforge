@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 /**
- * Owns tenants, memberships, and Current Tenant selection inside the IAM bounded context.
+ * Owns tenants and their lifecycle inside the IAM bounded context.
  */
 @NullMarked
 package com.cloudforge.iam.tenancy;

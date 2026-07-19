@@ -4,24 +4,28 @@
 
 ### `services/iam`
 
-The only initial domain bounded context. Its internal package seams are:
+Owns global identity and Tenant lifecycle. Its internal package seams are:
 
 - `identity`: Users, credentials, authentication policy, and account lifecycle.
-- `tenancy`: Tenants, Memberships, and Current Tenant selection.
-- `authorization`: Permission definitions, Tenant Roles, Platform Roles, and permission expansion.
-- `protocol`: OAuth 2.1 and OpenID Connect adapters.
+- `tenancy`: Tenants and their lifecycle; it does not own Employee or External Contact.
+- `authorization`: Platform Roles only; Tenant business authorization stays in the owning domain application.
+- `protocol`: Login and Session adapters.
 
-These packages share one consistency boundary and database. They are not remote services.
+These packages share one consistency boundary and database. They are not remote services. See the [user and identity technical design](user-identity-technical-design.md).
 
 ### `services/gateway`
 
-A thin Spring Cloud Gateway Server MVC application for routing and edge policies. It owns no domain data and performs no domain authorization.
+A Spring Cloud Gateway Server MVC BFF for the single MVP browser host. It validates the Host-only Redis Session, establishes a trusted User context, enforces CSRF, strips client-supplied identity headers, and routes whitelisted user interfaces. It owns no domain data and performs no Employee or business-resource authorization.
+
+### `services/organization`
+
+Owns Tenant-local OrgUnits, Employees, OrgAssignments, External Contacts, Tenant Roles, directory search, imports, and organization audit. It uses the request Tenant and trusted Session User to enforce Employee status and its own interface permissions locally. It does not own Tenant, User credentials, or business-resource Collaborators. See the [technical design](organization-service-technical-design.md).
 
 ## Shared modules
 
 ### `shared/security`
 
-Provides the tenant-aware security seam consumed by future domain services: stable permission conversion and a `CurrentTenant` interface backed by the authenticated JWT. It depends only on Spring Security libraries and provides no Spring Boot auto-configuration. Each domain service owns bean wiring, its `SecurityFilterChain`, and endpoint authorization rules.
+Provides the security seam for the versioned Session User context, trusted internal User context, explicit Current Tenant path context, and uniform 401/403 handling. It depends only on Spring Security libraries and provides no Spring Boot auto-configuration. Each domain application owns bean wiring, its `SecurityFilterChain`, and interface authorization rules.
 
 ### `shared/messaging`
 

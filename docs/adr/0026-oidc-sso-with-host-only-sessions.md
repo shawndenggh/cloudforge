@@ -1,3 +1,0 @@
-# OIDC SSO with host-only sessions
-
-CloudForge implements IAM through Spring Security Authorization Server with OpenID Connect. Users authenticate with username and password only at `auth.example.com`, which maintains its own Host-only secure Session; each Web BFF uses Authorization Code with PKCE to perform a no-prompt OIDC round trip and then creates an independent Host-only Redis Session for its own subdomain. No parent-domain authentication cookie or direct cross-subdomain profile access is permitted. Local development exercises the same protocol over distinct `localhost` ports with unique cookie names and local-only HTTP settings, avoiding custom DNS, TLS, or local Kubernetes requirements.
