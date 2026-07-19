@@ -20,6 +20,10 @@ _Avoid_: Account, member, Employee, External Contact
 Server-side browser authentication state for one User. A Session proves the global User identity but never proves Employee status, Tenant access, a Tenant Role, or business-resource permission.
 _Avoid_: Tenant token, access authorization, Employee session
 
+**Login Email**:
+The globally unique, case-insensitive email-shaped identifier a User supplies for registration and password login. In the first release it is not verified and must not be treated as a trusted contact address or proof of email ownership.
+_Avoid_: Verified email, Primary Email, permanent identity
+
 **Primary Email**:
 The one verified, globally unique email currently used to identify and contact a User. It may change after verification and may match an Employee's Work Email, but it is never the User's permanent identity.
 _Avoid_: User ID, Work Email, permanent identity
