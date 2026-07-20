@@ -7,6 +7,7 @@ dependencies {
     implementation platform(libs.springCloudDependencies)
 
     implementation libs.springBootStarterActuator
+    implementation libs.springBootStarterSecurity
     implementation libs.springCloudStarterGatewayServerWebmvc
 
     testImplementation libs.springBootStarterTest
