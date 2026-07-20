@@ -16,6 +16,10 @@ _Avoid_: Active workspace, selected account
 A platform-wide human identity with its own account lifecycle and one or more login methods. A User may be linked to Employees or External Contacts in multiple Tenants, but is not itself a Tenant identity or authorization relationship.
 _Avoid_: Account, member, Employee, External Contact
 
+**User Profile**:
+The self-facing representation of a User's global identity information. It has no lifecycle separate from the User and is read-only in the first release.
+_Avoid_: Account profile, Tenant profile, role profile
+
 **Session**:
 Server-side browser authentication state for one User. A Session proves the global User identity but never proves Employee status, Tenant access, a Tenant Role, or business-resource permission.
 _Avoid_: Tenant token, access authorization, Employee session
