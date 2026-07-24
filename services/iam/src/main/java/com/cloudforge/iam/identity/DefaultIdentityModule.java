@@ -42,15 +42,25 @@ public final class DefaultIdentityModule implements IdentityModule {
 
 	private final String dummyPasswordHash;
 
+	private final PasswordHashUpgradeFailureRecorder passwordHashUpgradeFailures;
+
 	public DefaultIdentityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
 			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock,
 			String dummyPasswordHash) {
+		this(identityStore, passwordHasher, sessionStore, registrationRateLimiter, clock, dummyPasswordHash, () -> {
+		});
+	}
+
+	public DefaultIdentityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
+			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock,
+			String dummyPasswordHash, PasswordHashUpgradeFailureRecorder passwordHashUpgradeFailures) {
 		this.identityStore = identityStore;
 		this.passwordHasher = passwordHasher;
 		this.sessionStore = sessionStore;
 		this.registrationRateLimiter = registrationRateLimiter;
 		this.clock = clock;
 		this.dummyPasswordHash = dummyPasswordHash;
+		this.passwordHashUpgradeFailures = passwordHashUpgradeFailures;
 	}
 
 	@Override
@@ -91,7 +101,9 @@ public final class DefaultIdentityModule implements IdentityModule {
 		if (credential.isEmpty() || !matches) {
 			throw new InvalidCredentialsException();
 		}
-		return new Authentication(createSession(credential.orElseThrow().userId(), false));
+		PasswordCredential verifiedCredential = credential.orElseThrow();
+		upgradePasswordHash(password, verifiedCredential);
+		return new Authentication(createSession(verifiedCredential.userId(), false));
 	}
 
 	@Override
@@ -124,6 +136,19 @@ public final class DefaultIdentityModule implements IdentityModule {
 			}
 		}
 		throw new AssertionError("Session retry loop exhausted without a result");
+	}
+
+	private void upgradePasswordHash(String password, PasswordCredential credential) {
+		if (!this.passwordHasher.upgradeEncoding(credential.passwordHash())) {
+			return;
+		}
+		String upgradedPasswordHash = this.passwordHasher.hash(password);
+		try {
+			this.identityStore.updatePasswordHash(credential.userId(), upgradedPasswordHash);
+		}
+		catch (RuntimeException exception) {
+			this.passwordHashUpgradeFailures.record();
+		}
 	}
 
 	private static List<FieldError> validatePassword(String password, String confirmPassword) {

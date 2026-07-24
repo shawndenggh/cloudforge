@@ -18,10 +18,16 @@ package com.cloudforge.iam.persistence;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 interface UserJpaRepository extends JpaRepository<UserEntity, UUID> {
 
 	Optional<UserEntity> findByEmail(String email);
+
+	@Modifying
+	@Query("UPDATE UserEntity user SET user.passwordHash = :passwordHash WHERE user.id = :userId")
+	int updatePasswordHash(UUID userId, String passwordHash);
 
 }

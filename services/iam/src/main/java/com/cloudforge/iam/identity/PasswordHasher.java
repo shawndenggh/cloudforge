@@ -21,4 +21,8 @@ public interface PasswordHasher {
 
 	boolean matches(String password, String passwordHash);
 
+	default boolean upgradeEncoding(String passwordHash) {
+		return false;
+	}
+
 }

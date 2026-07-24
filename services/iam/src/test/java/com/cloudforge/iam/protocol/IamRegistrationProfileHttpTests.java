@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CyclicBarrier;
@@ -39,6 +40,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import com.cloudforge.iam.IamApplication;
+import com.password4j.Argon2Function;
+import com.password4j.Password;
+import com.password4j.types.Argon2;
 import org.flywaydb.core.Flyway;
 
 import org.junit.jupiter.api.Test;
@@ -52,6 +56,7 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -88,6 +93,9 @@ class IamRegistrationProfileHttpTests {
 
 	@Autowired
 	private StringRedisTemplate redis;
+
+	@Autowired
+	private PasswordEncoder passwordEncoder;
 
 	@DynamicPropertySource
 	static void infrastructure(DynamicPropertyRegistry registry) {
@@ -254,6 +262,37 @@ class IamRegistrationProfileHttpTests {
 		assertInvalidCredentials(wrongPassword);
 		assertInvalidCredentials(unknownEmail);
 		assertThat(withoutTraceId(wrongPassword.body())).isEqualTo(withoutTraceId(unknownEmail.body()));
+	}
+
+	@Test
+	void successfulLoginUpgradesAnOlderArgon2idHashWithANewSalt() throws Exception {
+		String email = "old-password-hash@example.com";
+		String password = "correct horse battery staple";
+		HttpResponse<String> registration = postRegistration(HttpClient.newHttpClient(), """
+				{"email":"%s",
+				 "password":"%s",
+				 "confirmPassword":"%s"}
+				""".formatted(email, password, password), "application/json");
+		assertThat(registration.statusCode()).isEqualTo(201);
+		Argon2Function oldFunction = Argon2Function.getInstance(12_288, 1, 1, 32, Argon2.ID);
+		String oldPasswordHash = Objects
+			.requireNonNull(Password.hash(password).addRandomSalt(16).with(oldFunction).getResult());
+		this.jdbc.update("UPDATE users SET password_hash = ? WHERE email = ?", oldPasswordHash, email);
+		assertThat(this.passwordEncoder.matches(password, oldPasswordHash)).isTrue();
+		assertThat(this.passwordEncoder.upgradeEncoding(oldPasswordHash)).isTrue();
+
+		HttpResponse<String> login = postLogin(HttpClient.newHttpClient(), """
+				{"email":"%s",
+				 "password":"%s"}
+				""".formatted(email, password));
+
+		assertSuccessfulLogin(login);
+		String upgradedPasswordHash = this.jdbc.queryForObject("SELECT password_hash FROM users WHERE email = ?",
+				String.class, email);
+		assertThat(upgradedPasswordHash).startsWith("$argon2id$v=19$m=19456,t=2,p=1$").isNotEqualTo(oldPasswordHash);
+		assertThat(argon2Salt(upgradedPasswordHash)).isNotEqualTo(argon2Salt(oldPasswordHash));
+		assertThat(this.passwordEncoder.matches(password, upgradedPasswordHash)).isTrue();
+		assertThat(this.passwordEncoder.upgradeEncoding(upgradedPasswordHash)).isFalse();
 	}
 
 	@Test
@@ -641,6 +680,12 @@ class IamRegistrationProfileHttpTests {
 
 	private static String withoutTraceId(String body) {
 		return body.replaceAll("\"traceId\":\"[0-9a-f]{32}\"", "\"traceId\":\"\"");
+	}
+
+	private static String argon2Salt(String passwordHash) {
+		int hashSeparator = passwordHash.lastIndexOf('$');
+		int saltSeparator = passwordHash.lastIndexOf('$', hashSeparator - 1);
+		return passwordHash.substring(saltSeparator + 1, hashSeparator);
 	}
 
 }

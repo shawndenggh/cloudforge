@@ -31,6 +31,7 @@ import java.util.function.BooleanSupplier;
 import com.cloudforge.iam.identity.IdentityModule.RegisterCommand;
 import com.cloudforge.iam.identity.IdentityModule.LoginCommand;
 import com.cloudforge.iam.identity.IdentityModule.UserProfile;
+import com.cloudforge.iam.identity.IdentityStore.PasswordCredential;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -254,6 +255,66 @@ class IdentityModuleTests {
 				new PasswordVerification("wrong password phrase", "argon2:dummy password phrase"));
 	}
 
+	@Test
+	void upgradesAnOlderPasswordHashAfterSuccessfulVerification() {
+		InMemoryIdentityStore identities = new InMemoryIdentityStore();
+		identities.create("upgrade@example.com", "argon2:old-parameters", REGISTERED_AT);
+		UpgradingPasswordHasher passwordHasher = new UpgradingPasswordHasher(true);
+		RecordingPasswordHashUpgradeFailureRecorder failures = new RecordingPasswordHashUpgradeFailureRecorder();
+		IdentityModule module = new DefaultIdentityModule(identities, passwordHasher,
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC),
+				DUMMY_PASSWORD_HASH, failures);
+
+		IdentityModule.Authentication authentication = module
+			.login(new LoginCommand("upgrade@example.com", "correct password phrase"));
+
+		assertThat(authentication.sessionId()).isEqualTo("session-1");
+		assertThat(identities.findCredentialByEmail("upgrade@example.com"))
+			.contains(new PasswordCredential(USER_ID, "argon2:current-parameters:new-salt"));
+		assertThat(identities.passwordHashUpdates()).isEqualTo(1);
+		assertThat(failures.count()).isZero();
+	}
+
+	@Test
+	void leavesACurrentPasswordHashUnchangedAfterSuccessfulVerification() {
+		InMemoryIdentityStore identities = new InMemoryIdentityStore();
+		identities.create("current@example.com", "argon2:current-parameters", REGISTERED_AT);
+		UpgradingPasswordHasher passwordHasher = new UpgradingPasswordHasher(false);
+		RecordingPasswordHashUpgradeFailureRecorder failures = new RecordingPasswordHashUpgradeFailureRecorder();
+		IdentityModule module = new DefaultIdentityModule(identities, passwordHasher,
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC),
+				DUMMY_PASSWORD_HASH, failures);
+
+		IdentityModule.Authentication authentication = module
+			.login(new LoginCommand("current@example.com", "correct password phrase"));
+
+		assertThat(authentication.sessionId()).isEqualTo("session-1");
+		assertThat(identities.findCredentialByEmail("current@example.com"))
+			.contains(new PasswordCredential(USER_ID, "argon2:current-parameters"));
+		assertThat(identities.passwordHashUpdates()).isZero();
+		assertThat(failures.count()).isZero();
+	}
+
+	@Test
+	void passwordHashUpgradeWriteFailureDoesNotPreventLogin() {
+		InMemoryIdentityStore identities = new InMemoryIdentityStore();
+		identities.create("upgrade-failure@example.com", "argon2:old-parameters", REGISTERED_AT);
+		identities.failPasswordHashUpdates();
+		RecordingPasswordHashUpgradeFailureRecorder failures = new RecordingPasswordHashUpgradeFailureRecorder();
+		IdentityModule module = new DefaultIdentityModule(identities, new UpgradingPasswordHasher(true),
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC),
+				DUMMY_PASSWORD_HASH, failures);
+
+		IdentityModule.Authentication authentication = module
+			.login(new LoginCommand("upgrade-failure@example.com", "correct password phrase"));
+
+		assertThat(authentication.sessionId()).isEqualTo("session-1");
+		assertThat(identities.findCredentialByEmail("upgrade-failure@example.com"))
+			.contains(new PasswordCredential(USER_ID, "argon2:old-parameters"));
+		assertThat(identities.passwordHashUpdates()).isEqualTo(1);
+		assertThat(failures.count()).isEqualTo(1);
+	}
+
 	private static RegistrationRateLimiter noRateLimit() {
 		return new RegistrationRateLimiter() {
 			@Override
@@ -330,6 +391,31 @@ class IdentityModuleTests {
 
 	}
 
+	private static final class UpgradingPasswordHasher implements PasswordHasher {
+
+		private final boolean upgradeRequired;
+
+		UpgradingPasswordHasher(boolean upgradeRequired) {
+			this.upgradeRequired = upgradeRequired;
+		}
+
+		@Override
+		public String hash(String password) {
+			return "argon2:current-parameters:new-salt";
+		}
+
+		@Override
+		public boolean matches(String password, String passwordHash) {
+			return password.equals("correct password phrase");
+		}
+
+		@Override
+		public boolean upgradeEncoding(String passwordHash) {
+			return this.upgradeRequired;
+		}
+
+	}
+
 	private static final class InMemoryIdentityStore implements IdentityStore {
 
 		private final Map<UUID, UserProfile> users = new HashMap<>();
@@ -338,10 +424,17 @@ class IdentityModuleTests {
 
 		private final java.util.ArrayList<String> passwordHashes = new java.util.ArrayList<>();
 
+		private final Map<String, String> credentials = new HashMap<>();
+
+		private final AtomicInteger passwordHashUpdates = new AtomicInteger();
+
+		private boolean failPasswordHashUpdates;
+
 		@Override
 		public UserProfile create(String email, String passwordHash, Instant registeredAt) {
 			this.creates.incrementAndGet();
 			this.passwordHashes.add(passwordHash);
+			this.credentials.put(email, passwordHash);
 			UserProfile user = new UserProfile(USER_ID, email, registeredAt);
 			this.users.put(user.id(), user);
 			return user;
@@ -358,7 +451,20 @@ class IdentityModuleTests {
 				.stream()
 				.filter(user -> user.email().equals(email))
 				.findFirst()
-				.map(user -> new PasswordCredential(user.id(), this.passwordHashes.getFirst()));
+				.map(user -> new PasswordCredential(user.id(), this.credentials.get(email)));
+		}
+
+		@Override
+		public void updatePasswordHash(UUID userId, String passwordHash) {
+			this.passwordHashUpdates.incrementAndGet();
+			if (this.failPasswordHashUpdates) {
+				throw new IllegalStateException("Simulated password hash upgrade failure");
+			}
+			this.users.values()
+				.stream()
+				.filter(user -> user.id().equals(userId))
+				.findFirst()
+				.ifPresent(user -> this.credentials.put(user.email(), passwordHash));
 		}
 
 		int creates() {
@@ -367,6 +473,14 @@ class IdentityModuleTests {
 
 		List<String> passwordHashes() {
 			return List.copyOf(this.passwordHashes);
+		}
+
+		int passwordHashUpdates() {
+			return this.passwordHashUpdates.get();
+		}
+
+		void failPasswordHashUpdates() {
+			this.failPasswordHashUpdates = true;
 		}
 
 	}
@@ -458,6 +572,22 @@ class IdentityModuleTests {
 	}
 
 	private record PasswordVerification(String password, String passwordHash) {
+	}
+
+	private static final class RecordingPasswordHashUpgradeFailureRecorder
+			implements PasswordHashUpgradeFailureRecorder {
+
+		private final AtomicInteger count = new AtomicInteger();
+
+		@Override
+		public void record() {
+			this.count.incrementAndGet();
+		}
+
+		int count() {
+			return this.count.get();
+		}
+
 	}
 
 	private static final class MutableClock extends Clock {
