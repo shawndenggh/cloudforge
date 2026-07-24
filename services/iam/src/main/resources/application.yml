@@ -26,6 +26,9 @@ spring:
       namespace: cloudforge:${APP_ENV:local}:session
 
 cloudforge:
+  iam:
+    registration-rate-limit:
+      namespace: cloudforge:${APP_ENV:local}:iam:registration-rate-limit
   security:
     secure-cookies: true
 

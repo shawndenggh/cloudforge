@@ -19,10 +19,13 @@ import java.time.Clock;
 import java.util.Objects;
 
 import com.cloudforge.iam.identity.DefaultIdentityModule;
+import com.cloudforge.iam.identity.DefaultRegistrationRateLimiter;
 import com.cloudforge.iam.identity.IdentityModule;
 import com.cloudforge.iam.identity.IdentitySessionStore;
 import com.cloudforge.iam.identity.IdentityStore;
 import com.cloudforge.iam.identity.PasswordHasher;
+import com.cloudforge.iam.identity.RegistrationRateLimiter;
+import com.cloudforge.iam.identity.RegistrationRateLimitStore;
 import com.password4j.Argon2Function;
 import com.password4j.types.Argon2;
 
@@ -51,8 +54,13 @@ class IdentityConfiguration {
 
 	@Bean
 	IdentityModule identityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
-			IdentitySessionStore sessionStore, Clock clock) {
-		return new DefaultIdentityModule(identityStore, passwordHasher, sessionStore, clock);
+			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock) {
+		return new DefaultIdentityModule(identityStore, passwordHasher, sessionStore, registrationRateLimiter, clock);
+	}
+
+	@Bean
+	RegistrationRateLimiter registrationRateLimiter(RegistrationRateLimitStore store, Clock clock) {
+		return new DefaultRegistrationRateLimiter(store, clock);
 	}
 
 }

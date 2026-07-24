@@ -16,10 +16,12 @@
 package com.cloudforge.iam.identity;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,7 +47,7 @@ class IdentityModuleTests {
 	@Test
 	void registersUserAndCreatesUniqueSessionIdentity() {
 		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), password -> "argon2:" + password,
-				new InMemoryIdentitySessionStore(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
 
 		IdentityModule.Registration registration = module.register(new RegisterCommand("  New.User@Example.COM ",
 				"correct horse battery staple", "correct horse battery staple"));
@@ -63,7 +65,7 @@ class IdentityModuleTests {
 			String expectedNormalizedPassword) {
 		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
 		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), passwordHasher,
-				new InMemoryIdentitySessionStore(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
 
 		module.register(new RegisterCommand("valid@example.com", password, confirmation));
 
@@ -76,7 +78,7 @@ class IdentityModuleTests {
 			String expectedField, String expectedCode) {
 		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
 		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), passwordHasher,
-				new InMemoryIdentitySessionStore(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
 
 		assertThatThrownBy(() -> module.register(new RegisterCommand("valid@example.com", password, confirmation)))
 			.isInstanceOf(IdentityValidationException.class)
@@ -90,7 +92,7 @@ class IdentityModuleTests {
 		String maximumEmail = "a".repeat(64) + "@" + "b".repeat(63) + "." + "c".repeat(63) + "." + "d".repeat(61);
 		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
 		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), passwordHasher,
-				new InMemoryIdentitySessionStore(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
 
 		IdentityModule.Registration registration = module.register(
 				new RegisterCommand(maximumEmail, "correct horse battery staple", "correct horse battery staple"));
@@ -101,6 +103,84 @@ class IdentityModuleTests {
 			.isInstanceOf(IdentityValidationException.class)
 			.satisfies(exception -> assertThat(((IdentityValidationException) exception).errors())
 				.containsExactly(new IdentityValidationException.FieldError("email", "IAM_EMAIL_INVALID")));
+	}
+
+	@Test
+	void limitsRegistrationSourceBurstAndHourlyRateWithRetryAfter() {
+		MutableClock clock = new MutableClock(REGISTERED_AT);
+		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), password -> "unused",
+				new InMemoryIdentitySessionStore(),
+				new DefaultRegistrationRateLimiter(new InMemoryRegistrationRateLimitStore(), clock), clock);
+
+		for (int attempt = 0; attempt < 5; attempt++) {
+			module.checkRegistrationSource("192.0.2.10");
+		}
+		assertThatThrownBy(() -> module.checkRegistrationSource("192.0.2.10"))
+			.isInstanceOf(RegistrationRateLimitedException.class)
+			.satisfies(exception -> assertThat(((RegistrationRateLimitedException) exception).retryAfter())
+				.isEqualTo(Duration.ofSeconds(12)));
+
+		for (int attempt = 0; attempt < 16; attempt++) {
+			clock.advance(Duration.ofSeconds(12));
+			module.checkRegistrationSource("192.0.2.10");
+		}
+		clock.advance(Duration.ofSeconds(12));
+		assertThatThrownBy(() -> module.checkRegistrationSource("192.0.2.10"))
+			.isInstanceOf(RegistrationRateLimitedException.class)
+			.satisfies(exception -> assertThat(((RegistrationRateLimitedException) exception).retryAfter())
+				.isEqualTo(Duration.ofSeconds(156)));
+	}
+
+	@Test
+	void limitsNormalizedEmailBeforeAdditionalPasswordHashesOrUserWrites() {
+		MutableClock clock = new MutableClock(REGISTERED_AT);
+		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
+		InMemoryIdentityStore identities = new InMemoryIdentityStore();
+		IdentityModule module = new DefaultIdentityModule(identities, passwordHasher,
+				new InMemoryIdentitySessionStore(),
+				new DefaultRegistrationRateLimiter(new InMemoryRegistrationRateLimitStore(), clock), clock);
+		RegisterCommand command = new RegisterCommand(" Rate.Limited@Example.COM ", "correct horse battery staple",
+				"correct horse battery staple");
+
+		for (int attempt = 0; attempt < 10; attempt++) {
+			module.checkRegistrationEmail(command.email());
+			module.register(command);
+		}
+
+		assertThatThrownBy(() -> module.checkRegistrationEmail(command.email()))
+			.isInstanceOf(RegistrationRateLimitedException.class)
+			.satisfies(exception -> assertThat(((RegistrationRateLimitedException) exception).retryAfter())
+				.isEqualTo(Duration.ofMinutes(6)));
+		assertThat(passwordHasher.passwords()).hasSize(10);
+		assertThat(identities.creates()).isEqualTo(10);
+	}
+
+	@Test
+	void unavailableRateLimitStateFailsBeforePasswordValidationHashAndPersistence() {
+		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
+		InMemoryIdentityStore identities = new InMemoryIdentityStore();
+		Clock clock = Clock.fixed(REGISTERED_AT, ZoneOffset.UTC);
+		IdentityModule module = new DefaultIdentityModule(identities, passwordHasher,
+				new InMemoryIdentitySessionStore(), new DefaultRegistrationRateLimiter((buckets, now) -> {
+					throw new RegistrationRateLimitUnavailableException();
+				}, clock), clock);
+
+		assertThatThrownBy(() -> module.checkRegistrationEmail("valid@example.com"))
+			.isInstanceOf(RegistrationRateLimitUnavailableException.class);
+		assertThat(passwordHasher.passwords()).isEmpty();
+		assertThat(identities.creates()).isZero();
+	}
+
+	private static RegistrationRateLimiter noRateLimit() {
+		return new RegistrationRateLimiter() {
+			@Override
+			public void checkSource(String clientIp) {
+			}
+
+			@Override
+			public void checkEmail(String normalizedEmail) {
+			}
+		};
 	}
 
 	private static List<Arguments> validPasswords() {
@@ -145,8 +225,11 @@ class IdentityModuleTests {
 
 		private final Map<UUID, UserProfile> users = new HashMap<>();
 
+		private final AtomicInteger creates = new AtomicInteger();
+
 		@Override
 		public UserProfile create(String email, String passwordHash, Instant registeredAt) {
+			this.creates.incrementAndGet();
 			UserProfile user = new UserProfile(USER_ID, email, registeredAt);
 			this.users.put(user.id(), user);
 			return user;
@@ -155,6 +238,10 @@ class IdentityModuleTests {
 		@Override
 		public Optional<UserProfile> findById(UUID userId) {
 			return Optional.ofNullable(this.users.get(userId));
+		}
+
+		int creates() {
+			return this.creates.get();
 		}
 
 	}
@@ -166,6 +253,69 @@ class IdentityModuleTests {
 		@Override
 		public String create(UUID userId) {
 			return "session-" + this.sequence.incrementAndGet();
+		}
+
+	}
+
+	private static final class InMemoryRegistrationRateLimitStore implements RegistrationRateLimitStore {
+
+		private final Map<String, BucketState> states = new HashMap<>();
+
+		@Override
+		public Duration consume(List<TokenBucket> buckets, Instant now) {
+			Map<TokenBucket, Long> availableTokenUnits = new HashMap<>();
+			Duration retryAfter = Duration.ZERO;
+			for (TokenBucket bucket : buckets) {
+				long refillIntervalMillis = bucket.refillInterval().toMillis();
+				long capacityUnits = bucket.capacity() * refillIntervalMillis;
+				BucketState state = this.states.computeIfAbsent(bucket.key(),
+						key -> new BucketState(capacityUnits, now));
+				long elapsed = Duration.between(state.updatedAt(), now).toMillis();
+				long availableUnits = Math.min(capacityUnits, state.tokenUnits() + elapsed);
+				availableTokenUnits.put(bucket, availableUnits);
+				if (availableUnits < refillIntervalMillis) {
+					Duration wait = Duration.ofMillis(refillIntervalMillis - availableUnits);
+					if (wait.compareTo(retryAfter) > 0) {
+						retryAfter = wait;
+					}
+				}
+			}
+			boolean allowed = retryAfter.isZero();
+			availableTokenUnits.forEach((bucket, availableUnits) -> this.states.put(bucket.key(), new BucketState(
+					allowed ? availableUnits - bucket.refillInterval().toMillis() : availableUnits, now)));
+			return retryAfter;
+		}
+
+	}
+
+	private record BucketState(long tokenUnits, Instant updatedAt) {
+	}
+
+	private static final class MutableClock extends Clock {
+
+		private Instant instant;
+
+		MutableClock(Instant instant) {
+			this.instant = instant;
+		}
+
+		void advance(Duration duration) {
+			this.instant = this.instant.plus(duration);
+		}
+
+		@Override
+		public ZoneId getZone() {
+			return ZoneOffset.UTC;
+		}
+
+		@Override
+		public Clock withZone(ZoneId zone) {
+			return this;
+		}
+
+		@Override
+		public Instant instant() {
+			return this.instant;
 		}
 
 	}

@@ -24,6 +24,8 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.core.Ordered;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.http.CacheControl;
@@ -59,6 +61,14 @@ class GatewaySecurityConfiguration {
 			.addFilterBefore(trustedWriteRequestFilter, CorsFilter.class)
 			.exceptionHandling(exceptions -> exceptions.accessDeniedHandler(csrfAccessDeniedHandler));
 		return http.build();
+	}
+
+	@Bean
+	FilterRegistrationBean<TrustedClientIpHeaderFilter> trustedClientIpHeaderFilter() {
+		FilterRegistrationBean<TrustedClientIpHeaderFilter> registration = new FilterRegistrationBean<>();
+		registration.setFilter(new TrustedClientIpHeaderFilter());
+		registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+		return registration;
 	}
 
 	@Bean

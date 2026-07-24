@@ -15,22 +15,26 @@
  */
 package com.cloudforge.iam.protocol;
 
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.UUID;
 
 import com.cloudforge.iam.identity.IdentityModule;
+import com.cloudforge.iam.identity.RegistrationRateLimitUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 
 import org.springframework.web.servlet.HandlerInterceptor;
 
-final class RegistrationAuthenticationInterceptor implements HandlerInterceptor {
+final class RegistrationRequestInterceptor implements HandlerInterceptor {
 
 	private static final String USER_ID_ATTRIBUTE = "user_id";
 
 	private final IdentityModule identities;
 
-	RegistrationAuthenticationInterceptor(IdentityModule identities) {
+	RegistrationRequestInterceptor(IdentityModule identities) {
 		this.identities = identities;
 	}
 
@@ -38,12 +42,14 @@ final class RegistrationAuthenticationInterceptor implements HandlerInterceptor 
 	public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
 		HttpSession session = request.getSession(false);
 		if (session == null) {
+			checkSource(request);
 			return true;
 		}
 
 		Object userId = session.getAttribute(USER_ID_ATTRIBUTE);
 		if (!(userId instanceof String value)) {
 			session.invalidate();
+			checkSource(request);
 			return true;
 		}
 		try {
@@ -55,6 +61,52 @@ final class RegistrationAuthenticationInterceptor implements HandlerInterceptor 
 			// Invalid identity attributes are treated as an anonymous request.
 		}
 		session.invalidate();
+		checkSource(request);
+		return true;
+	}
+
+	private void checkSource(HttpServletRequest request) {
+		this.identities.checkRegistrationSource(trustedClientIp(request));
+	}
+
+	private static String trustedClientIp(HttpServletRequest request) {
+		String value = request.getHeader("X-CloudForge-Client-IP");
+		if (value == null || value.isBlank()) {
+			throw new RegistrationRateLimitUnavailableException();
+		}
+		try {
+			if (isIpv4(value)) {
+				return InetAddress.getByName(value).getHostAddress();
+			}
+			if (value.indexOf(':') >= 0 && value.chars()
+				.allMatch(character -> Character.digit(character, 16) >= 0 || character == ':' || character == '.')) {
+				InetAddress address = InetAddress.getByName(value);
+				if (address instanceof Inet6Address) {
+					return address.getHostAddress();
+				}
+			}
+		}
+		catch (UnknownHostException exception) {
+			// Invalid trusted context fails closed below.
+		}
+		throw new RegistrationRateLimitUnavailableException();
+	}
+
+	private static boolean isIpv4(String value) {
+		String[] parts = value.split("\\.", -1);
+		if (parts.length != 4) {
+			return false;
+		}
+		for (String part : parts) {
+			if (part.isEmpty() || part.length() > 3
+					|| !part.chars().allMatch(character -> character >= '0' && character <= '9')) {
+				return false;
+			}
+			int octet = Integer.parseInt(part);
+			if (octet > 255) {
+				return false;
+			}
+		}
 		return true;
 	}
 

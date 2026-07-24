@@ -13,29 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.cloudforge.iam.identity;
+/**
+ * Redis-backed temporary registration abuse limits.
+ */
+@NullMarked
+package com.cloudforge.iam.ratelimit;
 
-import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
-
-public interface IdentityModule {
-
-	Registration register(RegisterCommand command);
-
-	void checkRegistrationSource(String clientIp);
-
-	void checkRegistrationEmail(String email);
-
-	Optional<UserProfile> findUser(UUID userId);
-
-	record RegisterCommand(String email, String password, String confirmPassword) {
-	}
-
-	record Registration(UserProfile user, String sessionId) {
-	}
-
-	record UserProfile(UUID id, String email, Instant registeredAt) {
-	}
-
-}
+import org.jspecify.annotations.NullMarked;

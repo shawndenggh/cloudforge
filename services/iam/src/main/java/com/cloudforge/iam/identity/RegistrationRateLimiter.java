@@ -15,27 +15,10 @@
  */
 package com.cloudforge.iam.identity;
 
-import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
+public interface RegistrationRateLimiter {
 
-public interface IdentityModule {
+	void checkSource(String clientIp);
 
-	Registration register(RegisterCommand command);
-
-	void checkRegistrationSource(String clientIp);
-
-	void checkRegistrationEmail(String email);
-
-	Optional<UserProfile> findUser(UUID userId);
-
-	record RegisterCommand(String email, String password, String confirmPassword) {
-	}
-
-	record Registration(UserProfile user, String sessionId) {
-	}
-
-	record UserProfile(UUID id, String email, Instant registeredAt) {
-	}
+	void checkEmail(String normalizedEmail);
 
 }

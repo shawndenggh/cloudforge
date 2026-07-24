@@ -32,8 +32,7 @@ class IdentityProtocolConfiguration implements WebMvcConfigurer {
 
 	@Override
 	public void addInterceptors(InterceptorRegistry registry) {
-		registry.addInterceptor(new RegistrationAuthenticationInterceptor(this.identities))
-			.addPathPatterns("/auth/register");
+		registry.addInterceptor(new RegistrationRequestInterceptor(this.identities)).addPathPatterns("/auth/register");
 	}
 
 }

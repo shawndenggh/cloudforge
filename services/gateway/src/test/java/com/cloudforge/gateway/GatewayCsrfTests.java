@@ -17,6 +17,7 @@ package com.cloudforge.gateway;
 
 import java.io.OutputStream;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -25,6 +26,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.Objects;
 
 import com.sun.net.httpserver.HttpServer;
 
@@ -46,6 +48,8 @@ class GatewayCsrfTests {
 	private static final AtomicInteger IAM_REQUESTS = new AtomicInteger();
 
 	private static final AtomicReference<String> IAM_REQUEST_PATH = new AtomicReference<>();
+
+	private static final AtomicReference<String> IAM_CLIENT_IP = new AtomicReference<>();
 
 	private static final HttpServer IAM_STUB = startIamStub();
 
@@ -173,6 +177,7 @@ class GatewayCsrfTests {
 	void routesWriteWithTrustedRefererAndCsrfToken() throws IOException, InterruptedException {
 		IAM_REQUESTS.set(0);
 		IAM_REQUEST_PATH.set(null);
+		IAM_CLIENT_IP.set(null);
 		HttpResponse<String> csrfResponse = send(HttpRequest.newBuilder(csrfUri()).GET().build());
 		String csrfCookie = csrfResponse.headers()
 			.allValues("Set-Cookie")
@@ -186,6 +191,7 @@ class GatewayCsrfTests {
 			.header("Content-Type", "application/json")
 			.header("Cookie", csrfCookie)
 			.header("X-CloudForge-CSRF", csrfToken)
+			.header("X-CloudForge-Client-IP", "203.0.113.42")
 			.header("Referer", gatewayOrigin() + "/register")
 			.header("Sec-Fetch-Site", "same-origin")
 			.POST(HttpRequest.BodyPublishers.ofString("{}"))
@@ -197,6 +203,9 @@ class GatewayCsrfTests {
 		assertThat(response.body()).isEqualTo("iam");
 		assertThat(IAM_REQUESTS).hasValue(1);
 		assertThat(IAM_REQUEST_PATH).hasValue("/auth/register");
+		String clientIp = Objects.requireNonNull(IAM_CLIENT_IP.get());
+		assertThat(clientIp).isNotEqualTo("203.0.113.42");
+		assertThat(InetAddress.getByName(clientIp).isLoopbackAddress()).isTrue();
 	}
 
 	private URI csrfUri() {
@@ -221,6 +230,7 @@ class GatewayCsrfTests {
 			server.createContext("/", exchange -> {
 				IAM_REQUESTS.incrementAndGet();
 				IAM_REQUEST_PATH.set(exchange.getRequestURI().getPath());
+				IAM_CLIENT_IP.set(exchange.getRequestHeaders().getFirst("X-CloudForge-Client-IP"));
 				byte[] response = "iam".getBytes(StandardCharsets.UTF_8);
 				exchange.sendResponseHeaders(200, response.length);
 				try (OutputStream body = exchange.getResponseBody()) {
