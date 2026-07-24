@@ -23,9 +23,12 @@ import com.cloudforge.iam.identity.DefaultRegistrationRateLimiter;
 import com.cloudforge.iam.identity.IdentityModule;
 import com.cloudforge.iam.identity.IdentitySessionStore;
 import com.cloudforge.iam.identity.IdentityStore;
+import com.cloudforge.iam.identity.PasswordHashUpgradeFailureRecorder;
 import com.cloudforge.iam.identity.PasswordHasher;
 import com.cloudforge.iam.identity.RegistrationRateLimiter;
 import com.cloudforge.iam.identity.RegistrationRateLimitStore;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.password4j.Argon2Function;
 import com.password4j.types.Argon2;
 
@@ -59,15 +62,29 @@ class IdentityConfiguration {
 			public boolean matches(String password, String passwordHash) {
 				return passwordEncoder.matches(password, passwordHash);
 			}
+
+			@Override
+			public boolean upgradeEncoding(String passwordHash) {
+				return passwordEncoder.upgradeEncoding(passwordHash);
+			}
 		};
 	}
 
 	@Bean
 	IdentityModule identityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
-			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock) {
+			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock,
+			PasswordHashUpgradeFailureRecorder passwordHashUpgradeFailures) {
 		String dummyPasswordHash = passwordHasher.hash("CloudForge fixed dummy password credential");
 		return new DefaultIdentityModule(identityStore, passwordHasher, sessionStore, registrationRateLimiter, clock,
-				dummyPasswordHash);
+				dummyPasswordHash, passwordHashUpgradeFailures);
+	}
+
+	@Bean
+	PasswordHashUpgradeFailureRecorder passwordHashUpgradeFailureRecorder(MeterRegistry meterRegistry) {
+		Counter failures = Counter.builder("cloudforge.iam.password.hash.upgrade.failures")
+			.description("Password hash upgrades that could not be persisted")
+			.register(meterRegistry);
+		return failures::increment;
 	}
 
 	@Bean

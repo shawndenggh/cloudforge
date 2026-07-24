@@ -15,23 +15,9 @@
  */
 package com.cloudforge.iam.identity;
 
-import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
+@FunctionalInterface
+public interface PasswordHashUpgradeFailureRecorder {
 
-import com.cloudforge.iam.identity.IdentityModule.UserProfile;
-
-public interface IdentityStore {
-
-	UserProfile create(String email, String passwordHash, Instant registeredAt);
-
-	Optional<UserProfile> findById(UUID userId);
-
-	Optional<PasswordCredential> findCredentialByEmail(String email);
-
-	void updatePasswordHash(UUID userId, String passwordHash);
-
-	record PasswordCredential(UUID userId, String passwordHash) {
-	}
+	void record();
 
 }

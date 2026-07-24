@@ -39,4 +39,34 @@ final class CloudForgeArgon2PasswordEncoder extends Argon2Password4jPasswordEnco
 				Password.hash(rawPassword).addRandomSalt(SALT_LENGTH_BYTES).with(this.function).getResult());
 	}
 
+	@Override
+	protected boolean matchesNonNull(String rawPassword, String encodedPassword) {
+		try {
+			Argon2Function encodedFunction = Argon2Function.getInstanceFromHash(encodedPassword);
+			return Password.check(rawPassword, encodedPassword).with(encodedFunction);
+		}
+		catch (RuntimeException exception) {
+			return false;
+		}
+	}
+
+	@Override
+	protected boolean upgradeEncodingNonNull(String encodedPassword) {
+		try {
+			Argon2Function encodedFunction = Argon2Function.getInstanceFromHash(encodedPassword);
+			if (encodedFunction.getVariant() != this.function.getVariant()
+					|| encodedFunction.getVersion() != this.function.getVersion()) {
+				return true;
+			}
+			boolean noParameterIsStronger = encodedFunction.getMemory() <= this.function.getMemory()
+					&& encodedFunction.getIterations() <= this.function.getIterations()
+					&& encodedFunction.getParallelism() <= this.function.getParallelism()
+					&& encodedFunction.getOutputLength() <= this.function.getOutputLength();
+			return noParameterIsStronger && !encodedFunction.equals(this.function);
+		}
+		catch (RuntimeException exception) {
+			return false;
+		}
+	}
+
 }

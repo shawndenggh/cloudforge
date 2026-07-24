@@ -27,6 +27,7 @@ import com.cloudforge.iam.identity.IdentityStore.PasswordCredential;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 class JpaIdentityStore implements IdentityStore {
@@ -58,6 +59,14 @@ class JpaIdentityStore implements IdentityStore {
 	@Override
 	public Optional<PasswordCredential> findCredentialByEmail(String email) {
 		return this.users.findByEmail(email).map(UserEntity::toPasswordCredential);
+	}
+
+	@Override
+	@Transactional
+	public void updatePasswordHash(UUID userId, String passwordHash) {
+		if (this.users.updatePasswordHash(userId, passwordHash) != 1) {
+			throw new IllegalStateException("Password credential no longer exists");
+		}
 	}
 
 	private static boolean isEmailUniqueConstraintViolation(DataIntegrityViolationException exception) {
