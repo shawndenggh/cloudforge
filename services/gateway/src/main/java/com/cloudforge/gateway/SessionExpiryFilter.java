@@ -25,8 +25,10 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -42,6 +44,8 @@ final class SessionExpiryFilter extends OncePerRequestFilter {
 
 	private static final String PROFILE_PATH = "/api/v1/iam/user/profile";
 
+	private static final String LOGOUT_PATH = "/api/v1/iam/auth/logout";
+
 	private final Clock clock;
 
 	private final CookieSerializer cookieSerializer;
@@ -54,6 +58,10 @@ final class SessionExpiryFilter extends OncePerRequestFilter {
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
 			throws ServletException, IOException {
+		if (request.getRequestURI().equals(LOGOUT_PATH)) {
+			filterChain.doFilter(new LogoutRequest(request), response);
+			return;
+		}
 		HttpSession session = request.getSession(false);
 		if (session != null) {
 			Instant absoluteDeadline = Instant.ofEpochMilli(session.getCreationTime()).plus(ABSOLUTE_TIMEOUT);
@@ -109,6 +117,19 @@ final class SessionExpiryFilter extends OncePerRequestFilter {
 			}
 		}
 		return false;
+	}
+
+	private static final class LogoutRequest extends HttpServletRequestWrapper {
+
+		LogoutRequest(HttpServletRequest request) {
+			super(request);
+		}
+
+		@Override
+		public @Nullable HttpSession getSession(boolean create) {
+			return create ? super.getSession(true) : null;
+		}
+
 	}
 
 }

@@ -135,6 +135,11 @@ public final class DefaultIdentityModule implements IdentityModule {
 	}
 
 	@Override
+	public void logout(String sessionId) {
+		this.sessionStore.revoke(sessionId);
+	}
+
+	@Override
 	public void checkRegistrationSource(String clientIp) {
 		this.registrationRateLimiter.checkSource(clientIp);
 	}

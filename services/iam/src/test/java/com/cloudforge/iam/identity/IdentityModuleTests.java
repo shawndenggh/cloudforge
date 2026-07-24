@@ -21,9 +21,11 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -237,6 +239,22 @@ class IdentityModuleTests {
 		assertThat(passwordHasher.verifications()).containsExactly(
 				new PasswordVerification(normalizedPassword, "argon2:" + normalizedPassword),
 				new PasswordVerification(normalizedPassword, "argon2:" + normalizedPassword));
+	}
+
+	@Test
+	void logoutRevokesOnlyTheSelectedSessionAndIsIdempotent() {
+		InMemoryIdentitySessionStore sessions = new InMemoryIdentitySessionStore();
+		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), testPasswordHasher(), sessions,
+				noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC), DUMMY_PASSWORD_HASH);
+		IdentityModule.Registration first = module.register(new RegisterCommand("logout@example.com",
+				"correct horse battery staple", "correct horse battery staple"));
+		IdentityModule.Authentication second = module
+			.login(new LoginCommand("logout@example.com", "correct horse battery staple", CLIENT_IP));
+
+		module.logout(first.sessionId());
+		module.logout(first.sessionId());
+
+		assertThat(sessions.activeSessionIds()).containsExactly(second.sessionId());
 	}
 
 	@Test
@@ -611,9 +629,22 @@ class IdentityModuleTests {
 
 		private final AtomicInteger sequence = new AtomicInteger();
 
+		private final Set<String> activeSessionIds = new HashSet<>();
+
 		@Override
 		public String create(UUID userId) {
-			return "session-" + this.sequence.incrementAndGet();
+			String sessionId = "session-" + this.sequence.incrementAndGet();
+			this.activeSessionIds.add(sessionId);
+			return sessionId;
+		}
+
+		@Override
+		public void revoke(String sessionId) {
+			this.activeSessionIds.remove(sessionId);
+		}
+
+		Set<String> activeSessionIds() {
+			return Set.copyOf(this.activeSessionIds);
 		}
 
 	}
@@ -635,6 +666,10 @@ class IdentityModuleTests {
 			throw new IdentitySessionUnavailableException();
 		}
 
+		@Override
+		public void revoke(String sessionId) {
+		}
+
 		int attempts() {
 			return this.attempts.get();
 		}
@@ -651,6 +686,10 @@ class IdentityModuleTests {
 				throw new IdentitySessionUnavailableException();
 			}
 			return "recovered-session";
+		}
+
+		@Override
+		public void revoke(String sessionId) {
 		}
 
 		int attempts() {

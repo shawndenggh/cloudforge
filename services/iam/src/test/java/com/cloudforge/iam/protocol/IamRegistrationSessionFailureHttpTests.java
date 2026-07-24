@@ -157,6 +157,10 @@ class IamRegistrationSessionFailureHttpTests {
 			throw new IdentitySessionUnavailableException();
 		}
 
+		@Override
+		public void revoke(String sessionId) {
+		}
+
 		int attempts() {
 			return this.attempts.get();
 		}

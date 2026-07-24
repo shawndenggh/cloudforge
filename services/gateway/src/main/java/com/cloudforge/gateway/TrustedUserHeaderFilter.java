@@ -36,6 +36,8 @@ final class TrustedUserHeaderFilter extends OncePerRequestFilter {
 
 	private static final String PROFILE_PATH = "/api/v1/iam/user/profile";
 
+	private static final String LOGOUT_PATH = "/api/v1/iam/auth/logout";
+
 	private final SessionExpiryFilter sessionExpiryFilter;
 
 	TrustedUserHeaderFilter(SessionExpiryFilter sessionExpiryFilter) {
@@ -45,7 +47,7 @@ final class TrustedUserHeaderFilter extends OncePerRequestFilter {
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
 			throws ServletException, IOException {
-		HttpSession session = request.getSession(false);
+		HttpSession session = request.getRequestURI().equals(LOGOUT_PATH) ? null : request.getSession(false);
 		SessionUser sessionUser = sessionUser(session);
 		if (request.getRequestURI().equals(PROFILE_PATH) && sessionUser == null) {
 			if (session != null) {

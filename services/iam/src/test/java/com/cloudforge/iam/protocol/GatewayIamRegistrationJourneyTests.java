@@ -78,27 +78,17 @@ class GatewayIamRegistrationJourneyTests {
 	}
 
 	@Test
-	void obtainsCsrfRegistersAndReadsProfileThroughGateway() throws Exception {
-		CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
-		HttpClient client = HttpClient.newBuilder()
-			.cookieHandler(cookies)
+	void completesTheMinimumMultiDeviceIdentityJourneyThroughGateway() throws Exception {
+		CookieManager firstCookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+		HttpClient firstClient = HttpClient.newBuilder()
+			.cookieHandler(firstCookies)
 			.connectTimeout(Duration.ofSeconds(5))
 			.build();
 
-		HttpResponse<String> csrf = client.send(HttpRequest.newBuilder(uri("/api/v1/iam/csrf")).GET().build(),
-				HttpResponse.BodyHandlers.ofString());
-		String csrfCookie = csrf.headers()
-			.allValues("Set-Cookie")
-			.stream()
-			.filter(value -> value.startsWith("cloudforge_csrf_token="))
-			.findFirst()
-			.orElseThrow()
-			.split(";", 2)[0];
-		String csrfToken = csrfCookie.substring(csrfCookie.indexOf('=') + 1);
-
-		HttpResponse<String> registration = client.send(HttpRequest.newBuilder(uri("/api/v1/iam/auth/register"))
+		String registrationCsrf = csrfToken(firstClient);
+		HttpResponse<String> registration = firstClient.send(HttpRequest.newBuilder(uri("/api/v1/iam/auth/register"))
 			.header("Content-Type", "application/json")
-			.header("X-CloudForge-CSRF", csrfToken)
+			.header("X-CloudForge-CSRF", registrationCsrf)
 			.header("Origin", origin())
 			.header("Sec-Fetch-Site", "same-origin")
 			.POST(HttpRequest.BodyPublishers.ofString("""
@@ -110,18 +100,68 @@ class GatewayIamRegistrationJourneyTests {
 					"""))
 			.build(), HttpResponse.BodyHandlers.ofString());
 
-		assertThat(csrf.statusCode()).isEqualTo(204);
 		assertThat(registration.statusCode()).isEqualTo(201);
 		assertThat(registration.headers().allValues("Set-Cookie"))
 			.anyMatch(value -> value.startsWith("cloudforge_session="));
 
-		HttpResponse<String> profile = client.send(
+		HttpResponse<String> firstProfile = firstClient.send(
 				HttpRequest.newBuilder(uri("/api/v1/iam/user/profile")).GET().build(),
 				HttpResponse.BodyHandlers.ofString());
+		assertThat(firstProfile.statusCode()).isEqualTo(200);
+		assertThat(firstProfile.headers().firstValue("Cache-Control")).contains("no-store");
+		assertThat(firstProfile.body()).contains("\"email\":\"journey@example.com\"");
 
-		assertThat(profile.statusCode()).isEqualTo(200);
-		assertThat(profile.headers().firstValue("Cache-Control")).contains("no-store");
-		assertThat(profile.body()).contains("\"email\":\"journey@example.com\"");
+		CookieManager secondCookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+		HttpClient secondClient = HttpClient.newBuilder().cookieHandler(secondCookies).build();
+		String loginCsrf = csrfToken(secondClient);
+		HttpResponse<String> login = secondClient.send(HttpRequest.newBuilder(uri("/api/v1/iam/auth/login"))
+			.header("Content-Type", "application/json")
+			.header("X-CloudForge-CSRF", loginCsrf)
+			.header("Origin", origin())
+			.header("Sec-Fetch-Site", "same-origin")
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"email":"journey@example.com",
+					 "password":"correct horse battery staple"}
+					"""))
+			.build(), HttpResponse.BodyHandlers.ofString());
+		assertThat(login.statusCode()).isEqualTo(201);
+
+		String logoutCsrf = csrfToken(firstClient);
+		HttpResponse<String> logout = firstClient.send(HttpRequest.newBuilder(uri("/api/v1/iam/auth/logout"))
+			.header("X-CloudForge-CSRF", logoutCsrf)
+			.header("Origin", origin())
+			.header("Sec-Fetch-Site", "same-origin")
+			.POST(HttpRequest.BodyPublishers.noBody())
+			.build(), HttpResponse.BodyHandlers.ofString());
+		assertThat(logout.statusCode()).isEqualTo(204);
+		assertThat(logout.headers().allValues("Set-Cookie"))
+			.anyMatch(value -> value.startsWith("cloudforge_session=") && value.contains("Max-Age=0"))
+			.anyMatch(value -> value.startsWith("cloudforge_csrf_token=") && value.contains("Max-Age=0"));
+
+		HttpResponse<String> loggedOutProfile = firstClient.send(
+				HttpRequest.newBuilder(uri("/api/v1/iam/user/profile")).GET().build(),
+				HttpResponse.BodyHandlers.ofString());
+		HttpResponse<String> secondProfile = secondClient.send(
+				HttpRequest.newBuilder(uri("/api/v1/iam/user/profile")).GET().build(),
+				HttpResponse.BodyHandlers.ofString());
+		assertThat(loggedOutProfile.statusCode()).isEqualTo(401);
+		assertThat(loggedOutProfile.body()).contains("\"code\":\"SECURITY_UNAUTHENTICATED\"");
+		assertThat(secondProfile.statusCode()).isEqualTo(200);
+		assertThat(secondProfile.body()).contains("\"email\":\"journey@example.com\"");
+	}
+
+	private String csrfToken(HttpClient client) throws Exception {
+		HttpResponse<String> response = client.send(HttpRequest.newBuilder(uri("/api/v1/iam/csrf")).GET().build(),
+				HttpResponse.BodyHandlers.ofString());
+		assertThat(response.statusCode()).isEqualTo(204);
+		String cookie = response.headers()
+			.allValues("Set-Cookie")
+			.stream()
+			.filter(value -> value.startsWith("cloudforge_csrf_token="))
+			.findFirst()
+			.orElseThrow()
+			.split(";", 2)[0];
+		return cookie.substring(cookie.indexOf('=') + 1);
 	}
 
 	private URI uri(String path) {

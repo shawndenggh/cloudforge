@@ -15,12 +15,8 @@
  */
 package com.cloudforge.iam.identity;
 
-import java.util.UUID;
+public final class IdentitySessionRevocationUnavailableException extends RuntimeException {
 
-public interface IdentitySessionStore {
-
-	String create(UUID userId);
-
-	void revoke(String sessionId);
+	private static final long serialVersionUID = 1L;
 
 }
