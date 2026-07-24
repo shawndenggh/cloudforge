@@ -29,6 +29,10 @@ cloudforge:
 
 server:
   port: ${GATEWAY_SERVER_PORT:${SERVER_PORT:8080}}
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      internal-proxies: '${CLOUDFORGE_TRUSTED_INGRESS_PROXIES:127\.0\.0\.1|0:0:0:0:0:0:0:1|::1}'
   servlet:
     session:
       cookie:

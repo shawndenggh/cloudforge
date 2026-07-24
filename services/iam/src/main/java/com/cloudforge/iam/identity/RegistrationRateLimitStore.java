@@ -15,27 +15,12 @@
  */
 package com.cloudforge.iam.identity;
 
+import java.time.Duration;
 import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.List;
 
-public interface IdentityModule {
+public interface RegistrationRateLimitStore {
 
-	Registration register(RegisterCommand command);
-
-	void checkRegistrationSource(String clientIp);
-
-	void checkRegistrationEmail(String email);
-
-	Optional<UserProfile> findUser(UUID userId);
-
-	record RegisterCommand(String email, String password, String confirmPassword) {
-	}
-
-	record Registration(UserProfile user, String sessionId) {
-	}
-
-	record UserProfile(UUID id, String email, Instant registeredAt) {
-	}
+	Duration consume(List<TokenBucket> buckets, Instant now);
 
 }

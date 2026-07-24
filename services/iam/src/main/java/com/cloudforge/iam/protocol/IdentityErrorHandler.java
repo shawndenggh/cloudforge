@@ -24,10 +24,14 @@ import java.util.regex.Pattern;
 
 import com.cloudforge.iam.identity.EmailAlreadyRegisteredException;
 import com.cloudforge.iam.identity.IdentityValidationException;
+import com.cloudforge.iam.identity.RegistrationRateLimitedException;
+import com.cloudforge.iam.identity.RegistrationRateLimitUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -107,6 +111,31 @@ final class IdentityErrorHandler {
 		problem.setTitle("Already authenticated");
 		problem.setProperty("code", "IAM_ALREADY_AUTHENTICATED");
 		complete(problem, request, "iam", "already-authenticated");
+		return problem;
+	}
+
+	@ExceptionHandler(RegistrationRateLimitedException.class)
+	ResponseEntity<ProblemDetail> registrationRateLimited(RegistrationRateLimitedException exception,
+			HttpServletRequest request) {
+		long retryAfterSeconds = Math.ceilDiv(exception.retryAfter().toMillis(), 1_000);
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS,
+				"Registration attempts are temporarily limited.");
+		problem.setTitle("Registration rate limited");
+		problem.setProperty("code", "IAM_REGISTRATION_RATE_LIMITED");
+		problem.setProperty("retryAfterSeconds", retryAfterSeconds);
+		complete(problem, request, "iam", "registration-rate-limited");
+		return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+			.header(HttpHeaders.RETRY_AFTER, Long.toString(retryAfterSeconds))
+			.body(problem);
+	}
+
+	@ExceptionHandler(RegistrationRateLimitUnavailableException.class)
+	ProblemDetail registrationRateLimitUnavailable(HttpServletRequest request) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+				"Registration is temporarily unavailable.");
+		problem.setTitle("Dependency unavailable");
+		problem.setProperty("code", "PLATFORM_DEPENDENCY_UNAVAILABLE");
+		complete(problem, request, "platform", "dependency-unavailable");
 		return problem;
 	}
 

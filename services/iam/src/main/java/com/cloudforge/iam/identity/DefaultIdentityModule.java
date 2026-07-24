@@ -33,13 +33,16 @@ public final class DefaultIdentityModule implements IdentityModule {
 
 	private final IdentitySessionStore sessionStore;
 
+	private final RegistrationRateLimiter registrationRateLimiter;
+
 	private final Clock clock;
 
 	public DefaultIdentityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
-			IdentitySessionStore sessionStore, Clock clock) {
+			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock) {
 		this.identityStore = identityStore;
 		this.passwordHasher = passwordHasher;
 		this.sessionStore = sessionStore;
+		this.registrationRateLimiter = registrationRateLimiter;
 		this.clock = clock;
 	}
 
@@ -58,6 +61,16 @@ public final class DefaultIdentityModule implements IdentityModule {
 		}
 		UserProfile user = this.identityStore.create(email, this.passwordHasher.hash(password), this.clock.instant());
 		return new Registration(user, this.sessionStore.create(user.id()));
+	}
+
+	@Override
+	public void checkRegistrationSource(String clientIp) {
+		this.registrationRateLimiter.checkSource(clientIp);
+	}
+
+	@Override
+	public void checkRegistrationEmail(String email) {
+		this.registrationRateLimiter.checkEmail(normalizeEmail(email));
 	}
 
 	@Override

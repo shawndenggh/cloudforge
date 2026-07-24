@@ -68,6 +68,7 @@ final class IdentityController {
 	@PostMapping(path = "/auth/register", consumes = MediaType.APPLICATION_JSON_VALUE)
 	ResponseEntity<Void> register(@RequestBody JsonNode body, HttpServletRequest servletRequest,
 			HttpServletResponse servletResponse) {
+		checkParseableEmailRateLimit(body);
 		RegistrationRequest request = registrationRequest(body);
 		Registration registration = this.identities
 			.register(new RegisterCommand(request.email(), request.password(), request.confirmPassword()));
@@ -110,6 +111,16 @@ final class IdentityController {
 		catch (IllegalArgumentException exception) {
 			session.invalidate();
 			throw new UnauthenticatedException();
+		}
+	}
+
+	private void checkParseableEmailRateLimit(JsonNode body) {
+		if (!body.isObject()) {
+			return;
+		}
+		JsonNode email = body.get("email");
+		if (email != null && email.isString()) {
+			this.identities.checkRegistrationEmail(email.stringValue());
 		}
 	}
 

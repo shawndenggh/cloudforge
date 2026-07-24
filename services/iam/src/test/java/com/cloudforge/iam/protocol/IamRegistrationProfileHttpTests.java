@@ -25,11 +25,14 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -47,6 +50,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -64,6 +68,8 @@ class IamRegistrationProfileHttpTests {
 	private static final Pattern PROFILE_JSON = Pattern
 		.compile("\\{\"id\":\"([^\"]+)\",\"email\":\"new\\.user@example\\.com\",\"registeredAt\":\"[^\"]+\"}");
 
+	private static final AtomicInteger CLIENT_IP_SEQUENCE = new AtomicInteger();
+
 	@Container
 	private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18-alpine");
 
@@ -78,6 +84,9 @@ class IamRegistrationProfileHttpTests {
 
 	@Autowired
 	private Flyway flyway;
+
+	@Autowired
+	private StringRedisTemplate redis;
 
 	@DynamicPropertySource
 	static void infrastructure(DynamicPropertyRegistry registry) {
@@ -101,6 +110,7 @@ class IamRegistrationProfileHttpTests {
 
 		HttpResponse<String> registration = client.send(HttpRequest.newBuilder(uri("/auth/register"))
 			.header("Content-Type", "application/json")
+			.header("X-CloudForge-Client-IP", nextClientIp())
 			.POST(HttpRequest.BodyPublishers.ofString("""
 					{
 					  "email": "  New.User@Example.COM ",
@@ -179,6 +189,74 @@ class IamRegistrationProfileHttpTests {
 		assertThat(response.headers().firstValue("Content-Type")).contains("application/problem+json");
 		assertThat(response.body()).contains("\"code\":\"IAM_UNSUPPORTED_MEDIA_TYPE\"", "\"traceId\":\"")
 			.doesNotContain("email=valid@example.com");
+	}
+
+	@Test
+	void registrationFailsClosedWithoutTrustedClientIp() throws Exception {
+		HttpResponse<String> response = HttpClient.newHttpClient()
+			.send(HttpRequest.newBuilder(uri("/auth/register"))
+				.header("Content-Type", "application/json")
+				.POST(HttpRequest.BodyPublishers.ofString("{"))
+				.build(), HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(503);
+		assertThat(response.headers().firstValue("Content-Type")).contains("application/problem+json");
+		assertThat(response.body()).contains("\"code\":\"PLATFORM_DEPENDENCY_UNAVAILABLE\"", "\"traceId\":\"")
+			.doesNotContain("X-CloudForge-Client-IP");
+
+		HttpResponse<String> invalid = postRegistration(HttpClient.newHttpClient(), "{", "application/json",
+				"attacker.example");
+		assertThat(invalid.statusCode()).isEqualTo(503);
+		assertThat(invalid.body()).contains("\"code\":\"PLATFORM_DEPENDENCY_UNAVAILABLE\"")
+			.doesNotContain("attacker.example");
+	}
+
+	@Test
+	void malformedRegistrationConsumesOnlySourceBurstLimit() throws Exception {
+		String clientIp = "198.51.100.77";
+		for (int attempt = 0; attempt < 5; attempt++) {
+			HttpResponse<String> invalid = postRegistration(HttpClient.newHttpClient(), "{", "application/json",
+					clientIp);
+			assertThat(invalid.statusCode()).isEqualTo(400);
+		}
+
+		HttpResponse<String> limited = postRegistration(HttpClient.newHttpClient(), "{", "application/json", clientIp);
+
+		assertThat(limited.statusCode()).isEqualTo(429);
+		assertThat(limited.headers().firstValue("Retry-After")).hasValue("12");
+		assertThat(limited.body())
+			.contains("\"code\":\"IAM_REGISTRATION_RATE_LIMITED\"", "\"retryAfterSeconds\":12", "\"traceId\":\"")
+			.doesNotContain(clientIp);
+	}
+
+	@Test
+	void parseableEmailConsumesEmailLimitBeforePasswordValidationAndCreatesExpiringHashedState() throws Exception {
+		String email = "email-limit@example.com";
+		String invalidRegistration = """
+				{"email":"%s",
+				 "password":42,
+				 "confirmPassword":"short"}
+				""".formatted(email);
+		for (int attempt = 0; attempt < 10; attempt++) {
+			HttpResponse<String> invalid = postRegistration(HttpClient.newHttpClient(), invalidRegistration,
+					"application/json");
+			assertThat(invalid.statusCode()).isEqualTo(400);
+		}
+
+		HttpResponse<String> limited = postRegistration(HttpClient.newHttpClient(), invalidRegistration,
+				"application/json");
+
+		assertThat(limited.statusCode()).isEqualTo(429);
+		assertThat(limited.headers().firstValue("Retry-After")).hasValue("360");
+		assertThat(limited.body())
+			.contains("\"code\":\"IAM_REGISTRATION_RATE_LIMITED\"", "\"retryAfterSeconds\":360", "\"traceId\":\"")
+			.doesNotContain(email, "short", "\"password\":42");
+		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM users WHERE email = ?", Integer.class, email))
+			.isZero();
+		Set<String> keys = this.redis.keys("cloudforge:local:iam:registration-rate-limit:*");
+		assertThat(keys).isNotEmpty().noneMatch(key -> key.contains(email) || key.contains("198.51.100.77"));
+		assertThat(keys)
+			.allSatisfy(key -> assertThat(this.redis.getExpire(key, TimeUnit.SECONDS)).isBetween(1L, 3600L));
 	}
 
 	@Test
@@ -323,8 +401,14 @@ class IamRegistrationProfileHttpTests {
 	}
 
 	private HttpResponse<String> postRegistration(HttpClient client, String body, String contentType) throws Exception {
+		return postRegistration(client, body, contentType, nextClientIp());
+	}
+
+	private HttpResponse<String> postRegistration(HttpClient client, String body, String contentType, String clientIp)
+			throws Exception {
 		return client.send(HttpRequest.newBuilder(uri("/auth/register"))
 			.header("Content-Type", contentType)
+			.header("X-CloudForge-Client-IP", clientIp)
 			.POST(HttpRequest.BodyPublishers.ofString(body))
 			.build(), HttpResponse.BodyHandlers.ofString());
 	}
@@ -332,6 +416,10 @@ class IamRegistrationProfileHttpTests {
 	private HttpResponse<String> postRegistrationAfter(CyclicBarrier start, String body) throws Exception {
 		start.await();
 		return postRegistration(HttpClient.newHttpClient(), body, "application/json");
+	}
+
+	private static String nextClientIp() {
+		return "192.0.2." + CLIENT_IP_SEQUENCE.updateAndGet(value -> value % 250 + 1);
 	}
 
 	private static Stream<Arguments> invalidRegistrationRequests() {

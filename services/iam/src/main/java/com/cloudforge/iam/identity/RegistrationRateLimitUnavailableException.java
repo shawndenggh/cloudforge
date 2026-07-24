@@ -15,27 +15,12 @@
  */
 package com.cloudforge.iam.identity;
 
-import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
+public final class RegistrationRateLimitUnavailableException extends RuntimeException {
 
-public interface IdentityModule {
+	private static final long serialVersionUID = 1L;
 
-	Registration register(RegisterCommand command);
-
-	void checkRegistrationSource(String clientIp);
-
-	void checkRegistrationEmail(String email);
-
-	Optional<UserProfile> findUser(UUID userId);
-
-	record RegisterCommand(String email, String password, String confirmPassword) {
-	}
-
-	record Registration(UserProfile user, String sessionId) {
-	}
-
-	record UserProfile(UUID id, String email, Instant registeredAt) {
+	public RegistrationRateLimitUnavailableException() {
+		super("Registration rate limit state is unavailable");
 	}
 
 }
