@@ -12,5 +12,6 @@ dependencies {
     implementation libs.springCloudStarterGatewayServerWebmvc
 
     testImplementation libs.springBootStarterTest
+    testImplementation libs.testcontainersJunitJupiter
     testRuntimeOnly libs.junitPlatformLauncher
 }
