@@ -18,6 +18,7 @@ package com.cloudforge.iam.session;
 import java.util.UUID;
 
 import com.cloudforge.iam.identity.IdentitySessionStore;
+import com.cloudforge.iam.identity.IdentitySessionUnavailableException;
 
 import org.springframework.session.Session;
 import org.springframework.session.SessionRepository;
@@ -36,7 +37,12 @@ final class RedisIdentitySessionStore implements IdentitySessionStore {
 
 	@Override
 	public String create(UUID userId) {
-		return create(this.sessions, userId);
+		try {
+			return create(this.sessions, userId);
+		}
+		catch (RuntimeException exception) {
+			throw new IdentitySessionUnavailableException();
+		}
 	}
 
 	private static <S extends Session> String create(SessionRepository<S> sessions, UUID userId) {

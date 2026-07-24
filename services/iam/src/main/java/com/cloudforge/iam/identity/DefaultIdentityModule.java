@@ -27,6 +27,8 @@ import com.cloudforge.iam.identity.IdentityValidationException.FieldError;
 
 public final class DefaultIdentityModule implements IdentityModule {
 
+	private static final int SESSION_CREATION_ATTEMPTS = 3;
+
 	private final IdentityStore identityStore;
 
 	private final PasswordHasher passwordHasher;
@@ -60,7 +62,7 @@ public final class DefaultIdentityModule implements IdentityModule {
 			throw new IdentityValidationException(errors);
 		}
 		UserProfile user = this.identityStore.create(email, this.passwordHasher.hash(password), this.clock.instant());
-		return new Registration(user, this.sessionStore.create(user.id()));
+		return new Registration(user, createSession(user.id()));
 	}
 
 	@Override
@@ -76,6 +78,20 @@ public final class DefaultIdentityModule implements IdentityModule {
 	@Override
 	public Optional<UserProfile> findUser(UUID userId) {
 		return this.identityStore.findById(userId);
+	}
+
+	private String createSession(UUID userId) {
+		for (int attempt = 1; attempt <= SESSION_CREATION_ATTEMPTS; attempt++) {
+			try {
+				return this.sessionStore.create(userId);
+			}
+			catch (IdentitySessionUnavailableException exception) {
+				if (attempt == SESSION_CREATION_ATTEMPTS) {
+					throw new RegistrationSessionUnavailableException();
+				}
+			}
+		}
+		throw new AssertionError("Session retry loop exhausted without a result");
 	}
 
 	private static List<FieldError> validatePassword(String password, String confirmPassword) {

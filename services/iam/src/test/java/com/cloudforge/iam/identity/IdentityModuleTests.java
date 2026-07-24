@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 
 import com.cloudforge.iam.identity.IdentityModule.RegisterCommand;
 import com.cloudforge.iam.identity.IdentityModule.UserProfile;
@@ -171,6 +172,38 @@ class IdentityModuleTests {
 		assertThat(identities.creates()).isZero();
 	}
 
+	@Test
+	void retainsCommittedUserAfterBoundedSessionCreationFailures() {
+		InMemoryIdentityStore identities = new InMemoryIdentityStore();
+		AlwaysFailingIdentitySessionStore sessions = new AlwaysFailingIdentitySessionStore(
+				() -> identities.creates() == 1);
+		IdentityModule module = new DefaultIdentityModule(identities, password -> "argon2:" + password, sessions,
+				noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+
+		assertThatThrownBy(() -> module.register(new RegisterCommand("recoverable@example.com",
+				"correct horse battery staple", "correct horse battery staple")))
+			.isInstanceOf(RegistrationSessionUnavailableException.class);
+
+		assertThat(sessions.attempts()).isEqualTo(3);
+		assertThat(identities.creates()).isEqualTo(1);
+		assertThat(identities.findById(USER_ID))
+			.contains(new UserProfile(USER_ID, "recoverable@example.com", REGISTERED_AT));
+		assertThat(identities.passwordHashes()).containsExactly("argon2:correct horse battery staple");
+	}
+
+	@Test
+	void returnsRegistrationWhenSessionCreationRecoversWithinRetryBoundary() {
+		RecoveringIdentitySessionStore sessions = new RecoveringIdentitySessionStore();
+		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), password -> "argon2:" + password,
+				sessions, noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+
+		IdentityModule.Registration registration = module.register(new RegisterCommand("retry@example.com",
+				"correct horse battery staple", "correct horse battery staple"));
+
+		assertThat(registration.sessionId()).isEqualTo("recovered-session");
+		assertThat(sessions.attempts()).isEqualTo(3);
+	}
+
 	private static RegistrationRateLimiter noRateLimit() {
 		return new RegistrationRateLimiter() {
 			@Override
@@ -227,9 +260,12 @@ class IdentityModuleTests {
 
 		private final AtomicInteger creates = new AtomicInteger();
 
+		private final java.util.ArrayList<String> passwordHashes = new java.util.ArrayList<>();
+
 		@Override
 		public UserProfile create(String email, String passwordHash, Instant registeredAt) {
 			this.creates.incrementAndGet();
+			this.passwordHashes.add(passwordHash);
 			UserProfile user = new UserProfile(USER_ID, email, registeredAt);
 			this.users.put(user.id(), user);
 			return user;
@@ -244,6 +280,10 @@ class IdentityModuleTests {
 			return this.creates.get();
 		}
 
+		List<String> passwordHashes() {
+			return List.copyOf(this.passwordHashes);
+		}
+
 	}
 
 	private static final class InMemoryIdentitySessionStore implements IdentitySessionStore {
@@ -253,6 +293,47 @@ class IdentityModuleTests {
 		@Override
 		public String create(UUID userId) {
 			return "session-" + this.sequence.incrementAndGet();
+		}
+
+	}
+
+	private static final class AlwaysFailingIdentitySessionStore implements IdentitySessionStore {
+
+		private final BooleanSupplier userCommitted;
+
+		private final AtomicInteger attempts = new AtomicInteger();
+
+		AlwaysFailingIdentitySessionStore(BooleanSupplier userCommitted) {
+			this.userCommitted = userCommitted;
+		}
+
+		@Override
+		public String create(UUID userId) {
+			assertThat(this.userCommitted.getAsBoolean()).isTrue();
+			this.attempts.incrementAndGet();
+			throw new IdentitySessionUnavailableException();
+		}
+
+		int attempts() {
+			return this.attempts.get();
+		}
+
+	}
+
+	private static final class RecoveringIdentitySessionStore implements IdentitySessionStore {
+
+		private final AtomicInteger attempts = new AtomicInteger();
+
+		@Override
+		public String create(UUID userId) {
+			if (this.attempts.incrementAndGet() < 3) {
+				throw new IdentitySessionUnavailableException();
+			}
+			return "recovered-session";
+		}
+
+		int attempts() {
+			return this.attempts.get();
 		}
 
 	}
