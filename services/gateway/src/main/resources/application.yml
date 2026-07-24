@@ -12,9 +12,13 @@ spring:
             - id: iam-api
               uri: ${IAM_BASE_URL:http://localhost:9000}
               predicates:
-                - Path=/iam/**
+                - Path=/api/v1/iam/**
               filters:
-                - StripPrefix=1
+                - StripPrefix=3
+
+cloudforge:
+  security:
+    secure-cookies: true
 
 server:
   port: ${GATEWAY_SERVER_PORT:${SERVER_PORT:8080}}
@@ -28,3 +32,14 @@ management:
     health:
       probes:
         enabled: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+cloudforge:
+  security:
+    allowed-origins: ${CLOUDFORGE_ALLOWED_ORIGINS:}
+    secure-cookies: false
