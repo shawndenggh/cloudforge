@@ -57,13 +57,15 @@ class GatewaySecurityConfiguration {
 	@Bean
 	SecurityFilterChain gatewaySecurityFilterChain(HttpSecurity http, CookieCsrfTokenRepository csrfTokenRepository,
 			AccessDeniedHandler csrfAccessDeniedHandler, TrustedWriteRequestFilter trustedWriteRequestFilter,
-			CorsConfigurationSource corsConfigurationSource, SessionExpiryFilter sessionExpiryFilter) throws Exception {
+			CorsConfigurationSource corsConfigurationSource, SessionExpiryFilter sessionExpiryFilter,
+			TrustedUserHeaderFilter trustedUserHeaderFilter) throws Exception {
 		CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
 		http.authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll())
 			.cors(cors -> cors.configurationSource(corsConfigurationSource))
 			.csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository).csrfTokenRequestHandler(requestHandler))
 			.addFilterBefore(trustedWriteRequestFilter, CorsFilter.class)
 			.addFilterBefore(sessionExpiryFilter, AuthorizationFilter.class)
+			.addFilterAfter(trustedUserHeaderFilter, SessionExpiryFilter.class)
 			.exceptionHandling(exceptions -> exceptions.accessDeniedHandler(csrfAccessDeniedHandler));
 		return http.build();
 	}
@@ -88,6 +90,11 @@ class GatewaySecurityConfiguration {
 	@Bean
 	SessionExpiryFilter sessionExpiryFilter(Clock clock, CookieSerializer cookieSerializer) {
 		return new SessionExpiryFilter(clock, cookieSerializer);
+	}
+
+	@Bean
+	TrustedUserHeaderFilter trustedUserHeaderFilter(SessionExpiryFilter sessionExpiryFilter) {
+		return new TrustedUserHeaderFilter(sessionExpiryFilter);
 	}
 
 	@Bean

@@ -6,10 +6,11 @@ dependencies {
     implementation platform(libs.springBootDependencies)
 
     api libs.springSecurityCore
-    api libs.springSecurityOauth2Jose
-    api libs.springSecurityOauth2ResourceServer
+    api libs.springSecurityWeb
+    api libs.jakartaServletApi
 
     testImplementation libs.junitJupiter
     testImplementation libs.assertjCore
+    testImplementation libs.springTest
     testRuntimeOnly libs.junitPlatformLauncher
 }
