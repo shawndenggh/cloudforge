@@ -15,13 +15,37 @@
  */
 package com.cloudforge.iam.protocol;
 
+import java.net.URI;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.cloudforge.iam.identity.EmailAlreadyRegisteredException;
+import com.cloudforge.iam.identity.IdentityValidationException;
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 final class IdentityErrorHandler {
+
+	private static final Pattern TRACE_PARENT = Pattern
+		.compile("^[0-9a-f]{2}-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$");
+
+	private static final Map<String, String> FIELD_ERROR_DETAILS = Map.of("IAM_REQUEST_BODY_INVALID",
+			"Request body must be a JSON object.", "IAM_FIELD_REQUIRED", "A required string field is missing.",
+			"IAM_FIELD_TYPE_INVALID", "Field must be a string.", "IAM_EMAIL_INVALID",
+			"Email must be a valid ASCII email address.", "IAM_PASSWORD_LENGTH_INVALID",
+			"Password must contain 15 to 128 Unicode code points.", "IAM_PASSWORD_CONTROL_CHARACTER",
+			"Password must not contain control characters.", "IAM_PASSWORD_CONFIRMATION_MISMATCH",
+			"Password confirmation must match the password.");
 
 	@ExceptionHandler(UnauthenticatedException.class)
 	ProblemDetail unauthenticated() {
@@ -30,6 +54,80 @@ final class IdentityErrorHandler {
 		problem.setTitle("Unauthenticated");
 		problem.setProperty("code", "SECURITY_UNAUTHENTICATED");
 		return problem;
+	}
+
+	@ExceptionHandler(IdentityValidationException.class)
+	ProblemDetail validation(IdentityValidationException exception, HttpServletRequest request) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
+				"One or more registration fields are invalid.");
+		problem.setTitle("Registration validation failed");
+		problem.setProperty("code", "IAM_VALIDATION_FAILED");
+		problem.setProperty("errors",
+				exception.errors()
+					.stream()
+					.map(error -> new ProblemFieldError(error.field(), error.code(),
+							FIELD_ERROR_DETAILS.getOrDefault(error.code(), "Field is invalid.")))
+					.toList());
+		complete(problem, request, "iam", "validation-failed");
+		return problem;
+	}
+
+	@ExceptionHandler(HttpMessageNotReadableException.class)
+	ProblemDetail unreadableBody(HttpServletRequest request) {
+		return validation(
+				new IdentityValidationException(
+						List.of(new IdentityValidationException.FieldError("body", "IAM_REQUEST_BODY_INVALID"))),
+				request);
+	}
+
+	@ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+	ProblemDetail unsupportedMediaType(HttpServletRequest request) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+				"Registration requires Content-Type application/json.");
+		problem.setTitle("Unsupported media type");
+		problem.setProperty("code", "IAM_UNSUPPORTED_MEDIA_TYPE");
+		complete(problem, request, "iam", "unsupported-media-type");
+		return problem;
+	}
+
+	@ExceptionHandler(EmailAlreadyRegisteredException.class)
+	ProblemDetail emailAlreadyRegistered(HttpServletRequest request) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+				"The login email is already registered.");
+		problem.setTitle("Email already registered");
+		problem.setProperty("code", "IAM_EMAIL_ALREADY_REGISTERED");
+		complete(problem, request, "iam", "email-already-registered");
+		return problem;
+	}
+
+	@ExceptionHandler(AlreadyAuthenticatedException.class)
+	ProblemDetail alreadyAuthenticated(HttpServletRequest request) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+				"Sign out before registering another identity.");
+		problem.setTitle("Already authenticated");
+		problem.setProperty("code", "IAM_ALREADY_AUTHENTICATED");
+		complete(problem, request, "iam", "already-authenticated");
+		return problem;
+	}
+
+	private static void complete(ProblemDetail problem, HttpServletRequest request, String domain, String condition) {
+		problem.setType(URI.create("urn:cloudforge:problem:" + domain + ":" + condition));
+		problem.setInstance(URI.create(request.getRequestURI()));
+		problem.setProperty("traceId", traceId(request));
+	}
+
+	private static String traceId(HttpServletRequest request) {
+		String traceParent = request.getHeader("traceparent");
+		if (traceParent != null) {
+			Matcher matcher = TRACE_PARENT.matcher(traceParent);
+			if (matcher.matches() && !matcher.group(1).equals("00000000000000000000000000000000")) {
+				return matcher.group(1);
+			}
+		}
+		return UUID.randomUUID().toString().replace("-", "");
+	}
+
+	private record ProblemFieldError(String field, String code, String detail) {
 	}
 
 }

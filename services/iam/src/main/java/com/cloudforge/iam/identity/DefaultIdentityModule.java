@@ -17,9 +17,13 @@ package com.cloudforge.iam.identity;
 
 import java.text.Normalizer;
 import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.cloudforge.iam.identity.IdentityValidationException.FieldError;
 
 public final class DefaultIdentityModule implements IdentityModule {
 
@@ -41,15 +45,79 @@ public final class DefaultIdentityModule implements IdentityModule {
 
 	@Override
 	public Registration register(RegisterCommand command) {
-		String email = Normalizer.normalize(command.email().trim(), Normalizer.Form.NFC).toLowerCase(Locale.ROOT);
-		UserProfile user = this.identityStore.create(email, this.passwordHasher.hash(command.password()),
-				this.clock.instant());
+		String email = normalizeEmail(command.email());
+		String password = Normalizer.normalize(command.password(), Normalizer.Form.NFC);
+		String confirmPassword = Normalizer.normalize(command.confirmPassword(), Normalizer.Form.NFC);
+		List<FieldError> errors = new ArrayList<>();
+		if (!isValidEmailInput(command.email(), email)) {
+			errors.add(new FieldError("email", "IAM_EMAIL_INVALID"));
+		}
+		errors.addAll(validatePassword(password, confirmPassword));
+		if (!errors.isEmpty()) {
+			throw new IdentityValidationException(errors);
+		}
+		UserProfile user = this.identityStore.create(email, this.passwordHasher.hash(password), this.clock.instant());
 		return new Registration(user, this.sessionStore.create(user.id()));
 	}
 
 	@Override
 	public Optional<UserProfile> findUser(UUID userId) {
 		return this.identityStore.findById(userId);
+	}
+
+	private static List<FieldError> validatePassword(String password, String confirmPassword) {
+		List<FieldError> errors = new ArrayList<>();
+		int codePointCount = password.codePointCount(0, password.length());
+		if (codePointCount < 15 || codePointCount > 128) {
+			errors.add(new FieldError("password", "IAM_PASSWORD_LENGTH_INVALID"));
+		}
+		if (password.codePoints().anyMatch(codePoint -> Character.getType(codePoint) == Character.CONTROL)) {
+			errors.add(new FieldError("password", "IAM_PASSWORD_CONTROL_CHARACTER"));
+		}
+		if (!password.equals(confirmPassword)) {
+			errors.add(new FieldError("confirmPassword", "IAM_PASSWORD_CONFIRMATION_MISMATCH"));
+		}
+		return errors;
+	}
+
+	private static String normalizeEmail(String email) {
+		return Normalizer.normalize(email.trim(), Normalizer.Form.NFC).toLowerCase(Locale.ROOT);
+	}
+
+	private static boolean isValidEmailInput(String input, String normalized) {
+		if (input.codePointCount(0, input.length()) > 254 || normalized.length() > 254
+				|| normalized.chars().anyMatch(character -> character > 0x7f)) {
+			return false;
+		}
+
+		int at = normalized.indexOf('@');
+		if (at < 1 || at != normalized.lastIndexOf('@') || at > 64 || at == normalized.length() - 1) {
+			return false;
+		}
+
+		String localPart = normalized.substring(0, at);
+		String domain = normalized.substring(at + 1);
+		if (domain.length() > 253 || localPart.startsWith(".") || localPart.endsWith(".") || localPart.contains("..")
+				|| !localPart.chars().allMatch(DefaultIdentityModule::isLocalPartCharacter)) {
+			return false;
+		}
+
+		for (String label : domain.split("\\.", -1)) {
+			if (label.isEmpty() || label.length() > 63 || !isAsciiLetterOrDigit(label.charAt(0))
+					|| !isAsciiLetterOrDigit(label.charAt(label.length() - 1))
+					|| !label.chars().allMatch(character -> isAsciiLetterOrDigit(character) || character == '-')) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private static boolean isLocalPartCharacter(int character) {
+		return isAsciiLetterOrDigit(character) || "!#$%&'*+-/=?^_`{|}~.".indexOf(character) >= 0;
+	}
+
+	private static boolean isAsciiLetterOrDigit(int character) {
+		return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9');
 	}
 
 }

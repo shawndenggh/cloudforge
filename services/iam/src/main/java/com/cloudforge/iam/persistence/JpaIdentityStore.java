@@ -15,13 +15,16 @@
  */
 package com.cloudforge.iam.persistence;
 
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.cloudforge.iam.identity.EmailAlreadyRegisteredException;
 import com.cloudforge.iam.identity.IdentityModule.UserProfile;
 import com.cloudforge.iam.identity.IdentityStore;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -35,12 +38,34 @@ class JpaIdentityStore implements IdentityStore {
 
 	@Override
 	public UserProfile create(String email, String passwordHash, Instant registeredAt) {
-		return this.users.saveAndFlush(new UserEntity(email, passwordHash, registeredAt)).toProfile();
+		try {
+			return this.users.saveAndFlush(new UserEntity(email, passwordHash, registeredAt)).toProfile();
+		}
+		catch (DataIntegrityViolationException exception) {
+			if (isEmailUniqueConstraintViolation(exception)) {
+				throw new EmailAlreadyRegisteredException();
+			}
+			throw exception;
+		}
 	}
 
 	@Override
 	public Optional<UserProfile> findById(UUID userId) {
 		return this.users.findById(userId).map(UserEntity::toProfile);
+	}
+
+	private static boolean isEmailUniqueConstraintViolation(DataIntegrityViolationException exception) {
+		Throwable cause = exception;
+		while (cause != null) {
+			if (cause instanceof SQLException sqlException && "23505".equals(sqlException.getSQLState())) {
+				String message = sqlException.getMessage();
+				if (message != null && message.contains("users_email_key")) {
+					return true;
+				}
+			}
+			cause = cause.getCause();
+		}
+		return false;
 	}
 
 }
