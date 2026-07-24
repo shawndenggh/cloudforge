@@ -35,6 +35,7 @@ server:
       internal-proxies: '${CLOUDFORGE_TRUSTED_INGRESS_PROXIES:127\.0\.0\.1|0:0:0:0:0:0:0:1|::1}'
   servlet:
     session:
+      timeout: 12h
       cookie:
         name: cloudforge_session
         path: /

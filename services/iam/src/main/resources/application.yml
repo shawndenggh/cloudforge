@@ -38,6 +38,7 @@ server:
   port: ${IAM_SERVER_PORT:${SERVER_PORT:9000}}
   servlet:
     session:
+      timeout: 12h
       cookie:
         name: cloudforge_session
         path: /

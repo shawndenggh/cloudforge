@@ -57,6 +57,8 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.session.Session;
+import org.springframework.session.SessionRepository;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -97,6 +99,9 @@ class IamRegistrationProfileHttpTests {
 	@Autowired
 	private PasswordEncoder passwordEncoder;
 
+	@Autowired
+	private SessionRepository<?> sessions;
+
 	@DynamicPropertySource
 	static void infrastructure(DynamicPropertyRegistry registry) {
 		registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
@@ -136,6 +141,10 @@ class IamRegistrationProfileHttpTests {
 			.anySatisfy(value -> assertThat(value).startsWith("cloudforge_session=")
 				.contains("Path=/", "Max-Age=604800", "HttpOnly", "SameSite=Lax")
 				.doesNotContain("Domain=", "Secure"));
+		String sessionId = new String(Base64.getDecoder().decode(sessionCookie(cookies)), StandardCharsets.UTF_8);
+		Session storedSession = this.sessions.findById(sessionId);
+		assertThat(storedSession).isNotNull();
+		assertThat(storedSession.getMaxInactiveInterval()).isEqualTo(Duration.ofHours(12));
 
 		HttpResponse<String> profile = client.send(HttpRequest.newBuilder(uri("/user/profile")).GET().build(),
 				HttpResponse.BodyHandlers.ofString());

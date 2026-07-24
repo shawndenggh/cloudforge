@@ -16,6 +16,7 @@
 package com.cloudforge.gateway;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -33,6 +34,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfToken;
@@ -43,6 +45,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
+import org.springframework.session.web.http.CookieSerializer;
+import org.springframework.session.web.http.DefaultCookieSerializer;
 
 import static org.springframework.web.servlet.function.RequestPredicates.GET;
 import static org.springframework.web.servlet.function.RouterFunctions.route;
@@ -53,14 +57,37 @@ class GatewaySecurityConfiguration {
 	@Bean
 	SecurityFilterChain gatewaySecurityFilterChain(HttpSecurity http, CookieCsrfTokenRepository csrfTokenRepository,
 			AccessDeniedHandler csrfAccessDeniedHandler, TrustedWriteRequestFilter trustedWriteRequestFilter,
-			CorsConfigurationSource corsConfigurationSource) throws Exception {
+			CorsConfigurationSource corsConfigurationSource, SessionExpiryFilter sessionExpiryFilter) throws Exception {
 		CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
 		http.authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll())
 			.cors(cors -> cors.configurationSource(corsConfigurationSource))
 			.csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository).csrfTokenRequestHandler(requestHandler))
 			.addFilterBefore(trustedWriteRequestFilter, CorsFilter.class)
+			.addFilterBefore(sessionExpiryFilter, AuthorizationFilter.class)
 			.exceptionHandling(exceptions -> exceptions.accessDeniedHandler(csrfAccessDeniedHandler));
 		return http.build();
+	}
+
+	@Bean
+	Clock clock() {
+		return Clock.systemUTC();
+	}
+
+	@Bean
+	CookieSerializer sessionCookieSerializer(
+			@Value("${cloudforge.security.secure-cookies:true}") boolean secureCookies) {
+		DefaultCookieSerializer serializer = new DefaultCookieSerializer();
+		serializer.setCookieName("cloudforge_session");
+		serializer.setCookiePath("/");
+		serializer.setUseHttpOnlyCookie(true);
+		serializer.setUseSecureCookie(secureCookies);
+		serializer.setSameSite("Lax");
+		return serializer;
+	}
+
+	@Bean
+	SessionExpiryFilter sessionExpiryFilter(Clock clock, CookieSerializer cookieSerializer) {
+		return new SessionExpiryFilter(clock, cookieSerializer);
 	}
 
 	@Bean
