@@ -13,25 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.cloudforge.iam.identity;
+package com.cloudforge.iam.protocol;
 
-import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
+final class AlreadyAuthenticatedException extends RuntimeException {
 
-public interface IdentityModule {
+	private static final long serialVersionUID = 1L;
 
-	Registration register(RegisterCommand command);
-
-	Optional<UserProfile> findUser(UUID userId);
-
-	record RegisterCommand(String email, String password, String confirmPassword) {
-	}
-
-	record Registration(UserProfile user, String sessionId) {
-	}
-
-	record UserProfile(UUID id, String email, Instant registeredAt) {
+	AlreadyAuthenticatedException() {
+		super("An authenticated identity already exists");
 	}
 
 }

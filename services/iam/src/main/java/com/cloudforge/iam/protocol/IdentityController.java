@@ -16,8 +16,12 @@
 package com.cloudforge.iam.protocol;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
+import com.cloudforge.iam.identity.IdentityValidationException;
+import com.cloudforge.iam.identity.IdentityValidationException.FieldError;
 import com.cloudforge.iam.identity.IdentityModule;
 import com.cloudforge.iam.identity.IdentityModule.RegisterCommand;
 import com.cloudforge.iam.identity.IdentityModule.Registration;
@@ -25,11 +29,13 @@ import com.cloudforge.iam.identity.IdentityModule.UserProfile;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import tools.jackson.databind.JsonNode;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.session.web.http.CookieSerializer;
@@ -59,10 +65,12 @@ final class IdentityController {
 		this.secureCookies = secureCookies;
 	}
 
-	@PostMapping("/auth/register")
-	ResponseEntity<Void> register(@RequestBody RegistrationRequest request, HttpServletRequest servletRequest,
+	@PostMapping(path = "/auth/register", consumes = MediaType.APPLICATION_JSON_VALUE)
+	ResponseEntity<Void> register(@RequestBody JsonNode body, HttpServletRequest servletRequest,
 			HttpServletResponse servletResponse) {
-		Registration registration = this.identities.register(new RegisterCommand(request.email(), request.password()));
+		RegistrationRequest request = registrationRequest(body);
+		Registration registration = this.identities
+			.register(new RegisterCommand(request.email(), request.password(), request.confirmPassword()));
 		CookieValue sessionCookie = new CookieValue(servletRequest, servletResponse, registration.sessionId());
 		sessionCookie.setCookieMaxAge(Math.toIntExact(SESSION_COOKIE_MAX_AGE.toSeconds()));
 		this.cookieSerializer.writeCookieValue(sessionCookie);
@@ -103,6 +111,34 @@ final class IdentityController {
 			session.invalidate();
 			throw new UnauthenticatedException();
 		}
+	}
+
+	private static RegistrationRequest registrationRequest(JsonNode body) {
+		if (!body.isObject()) {
+			throw new IdentityValidationException(List.of(new FieldError("body", "IAM_REQUEST_BODY_INVALID")));
+		}
+
+		List<FieldError> errors = new ArrayList<>();
+		String email = requiredString(body, "email", errors);
+		String password = requiredString(body, "password", errors);
+		String confirmPassword = requiredString(body, "confirmPassword", errors);
+		if (!errors.isEmpty()) {
+			throw new IdentityValidationException(errors);
+		}
+		return new RegistrationRequest(email, password, confirmPassword);
+	}
+
+	private static String requiredString(JsonNode body, String field, List<FieldError> errors) {
+		JsonNode value = body.get(field);
+		if (value == null || value.isNull()) {
+			errors.add(new FieldError(field, "IAM_FIELD_REQUIRED"));
+			return "";
+		}
+		if (!value.isString()) {
+			errors.add(new FieldError(field, "IAM_FIELD_TYPE_INVALID"));
+			return "";
+		}
+		return value.stringValue();
 	}
 
 	record RegistrationRequest(String email, String password, String confirmPassword) {

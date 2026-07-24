@@ -15,23 +15,24 @@
  */
 package com.cloudforge.iam.identity;
 
-import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.List;
 
-public interface IdentityModule {
+public final class IdentityValidationException extends RuntimeException {
 
-	Registration register(RegisterCommand command);
+	private static final long serialVersionUID = 1L;
 
-	Optional<UserProfile> findUser(UUID userId);
+	private final transient List<FieldError> errors;
 
-	record RegisterCommand(String email, String password, String confirmPassword) {
+	public IdentityValidationException(List<FieldError> errors) {
+		super("Identity input validation failed");
+		this.errors = List.copyOf(errors);
 	}
 
-	record Registration(UserProfile user, String sessionId) {
+	public List<FieldError> errors() {
+		return this.errors;
 	}
 
-	record UserProfile(UUID id, String email, Instant registeredAt) {
+	public record FieldError(String field, String code) {
 	}
 
 }

@@ -18,6 +18,7 @@ package com.cloudforge.iam.identity;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -28,8 +29,12 @@ import com.cloudforge.iam.identity.IdentityModule.RegisterCommand;
 import com.cloudforge.iam.identity.IdentityModule.UserProfile;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class IdentityModuleTests {
 
@@ -42,14 +47,98 @@ class IdentityModuleTests {
 		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), password -> "argon2:" + password,
 				new InMemoryIdentitySessionStore(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
 
-		IdentityModule.Registration registration = module
-			.register(new RegisterCommand("  New.User@Example.COM ", "correct horse battery staple"));
-		IdentityModule.Registration anotherRegistration = module
-			.register(new RegisterCommand("another@example.com", "another correct password"));
+		IdentityModule.Registration registration = module.register(new RegisterCommand("  New.User@Example.COM ",
+				"correct horse battery staple", "correct horse battery staple"));
+		IdentityModule.Registration anotherRegistration = module.register(
+				new RegisterCommand("another@example.com", "another correct password", "another correct password"));
 
 		assertThat(registration.user()).isEqualTo(new UserProfile(USER_ID, "new.user@example.com", REGISTERED_AT));
 		assertThat(registration.sessionId()).isEqualTo("session-1");
 		assertThat(anotherRegistration.sessionId()).isEqualTo("session-2").isNotEqualTo(registration.sessionId());
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("validPasswords")
+	void acceptsPasswordPolicyBoundaries(String description, String password, String confirmation,
+			String expectedNormalizedPassword) {
+		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
+		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), passwordHasher,
+				new InMemoryIdentitySessionStore(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+
+		module.register(new RegisterCommand("valid@example.com", password, confirmation));
+
+		assertThat(passwordHasher.passwords()).containsExactly(expectedNormalizedPassword);
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("invalidPasswords")
+	void rejectsInvalidPasswordPolicyBoundaries(String description, String password, String confirmation,
+			String expectedField, String expectedCode) {
+		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
+		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), passwordHasher,
+				new InMemoryIdentitySessionStore(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+
+		assertThatThrownBy(() -> module.register(new RegisterCommand("valid@example.com", password, confirmation)))
+			.isInstanceOf(IdentityValidationException.class)
+			.satisfies(exception -> assertThat(((IdentityValidationException) exception).errors())
+				.containsExactly(new IdentityValidationException.FieldError(expectedField, expectedCode)));
+		assertThat(passwordHasher.passwords()).isEmpty();
+	}
+
+	@Test
+	void acceptsMaximumEmailLengthWithoutTruncationAndRejectsLongerInput() {
+		String maximumEmail = "a".repeat(64) + "@" + "b".repeat(63) + "." + "c".repeat(63) + "." + "d".repeat(61);
+		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
+		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), passwordHasher,
+				new InMemoryIdentitySessionStore(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+
+		IdentityModule.Registration registration = module.register(
+				new RegisterCommand(maximumEmail, "correct horse battery staple", "correct horse battery staple"));
+
+		assertThat(registration.user().email()).hasSize(254).isEqualTo(maximumEmail);
+		assertThatThrownBy(() -> module.register(new RegisterCommand(maximumEmail + "e", "correct horse battery staple",
+				"correct horse battery staple")))
+			.isInstanceOf(IdentityValidationException.class)
+			.satisfies(exception -> assertThat(((IdentityValidationException) exception).errors())
+				.containsExactly(new IdentityValidationException.FieldError("email", "IAM_EMAIL_INVALID")));
+	}
+
+	private static List<Arguments> validPasswords() {
+		String composed = "caf\u00e9 password phrase";
+		String decomposed = "cafe\u0301 password phrase";
+		return List.of(Arguments.of("15 code points", "123456789012345", "123456789012345", "123456789012345"),
+				Arguments.of("128 code points", "a".repeat(128), "a".repeat(128), "a".repeat(128)),
+				Arguments.of("spaces are preserved", "  password phrase  ", "  password phrase  ",
+						"  password phrase  "),
+				Arguments.of("NFD and NFC compare after normalization", decomposed, composed, composed));
+	}
+
+	private static List<Arguments> invalidPasswords() {
+		return List.of(
+				Arguments.of("14 code points", "a".repeat(14), "a".repeat(14), "password",
+						"IAM_PASSWORD_LENGTH_INVALID"),
+				Arguments.of("129 code points", "a".repeat(129), "a".repeat(129), "password",
+						"IAM_PASSWORD_LENGTH_INVALID"),
+				Arguments.of("control character", "valid password\u0000phrase", "valid password\u0000phrase",
+						"password", "IAM_PASSWORD_CONTROL_CHARACTER"),
+				Arguments.of("confirmation mismatch", "correct password phrase", "different password phrase",
+						"confirmPassword", "IAM_PASSWORD_CONFIRMATION_MISMATCH"));
+	}
+
+	private static final class RecordingPasswordHasher implements PasswordHasher {
+
+		private final java.util.ArrayList<String> passwords = new java.util.ArrayList<>();
+
+		@Override
+		public String hash(String password) {
+			this.passwords.add(password);
+			return "argon2:" + password;
+		}
+
+		List<String> passwords() {
+			return List.copyOf(this.passwords);
+		}
+
 	}
 
 	private static final class InMemoryIdentityStore implements IdentityStore {

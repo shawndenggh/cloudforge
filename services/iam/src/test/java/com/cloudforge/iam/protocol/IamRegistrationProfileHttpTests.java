@@ -26,13 +26,21 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import com.cloudforge.iam.IamApplication;
 import org.flywaydb.core.Flyway;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -146,6 +154,105 @@ class IamRegistrationProfileHttpTests {
 		assertUnauthenticated(profile);
 	}
 
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("invalidRegistrationRequests")
+	void registrationReturnsFieldProblemDetails(String description, String body, String field, String fieldCode)
+			throws Exception {
+		HttpResponse<String> response = postRegistration(HttpClient.newHttpClient(), body, "application/json");
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThat(response.headers().firstValue("Content-Type")).contains("application/problem+json");
+		assertThat(response.body())
+			.contains("\"type\":\"urn:cloudforge:problem:iam:validation-failed\"",
+					"\"title\":\"Registration validation failed\"", "\"status\":400", "\"instance\":\"/auth/register\"",
+					"\"code\":\"IAM_VALIDATION_FAILED\"", "\"traceId\":\"", "\"field\":\"" + field + "\"",
+					"\"code\":\"" + fieldCode + "\"")
+			.doesNotContain("correct horse battery staple", "password_hash", "java.");
+	}
+
+	@Test
+	void registrationRejectsUnsupportedMediaTypeWithProblemDetail() throws Exception {
+		HttpResponse<String> response = postRegistration(HttpClient.newHttpClient(), "email=valid@example.com",
+				"text/plain");
+
+		assertThat(response.statusCode()).isEqualTo(415);
+		assertThat(response.headers().firstValue("Content-Type")).contains("application/problem+json");
+		assertThat(response.body()).contains("\"code\":\"IAM_UNSUPPORTED_MEDIA_TYPE\"", "\"traceId\":\"")
+			.doesNotContain("email=valid@example.com");
+	}
+
+	@Test
+	void concurrentCaseVariantRegistrationsUseDatabaseUniqueConstraintAsFinalDecision() throws Exception {
+		String password = "correct horse battery staple";
+		String lowerCaseRequest = """
+				{"email":"concurrent@example.com",
+				 "password":"%s",
+				 "confirmPassword":"%s"}
+				""".formatted(password, password);
+		String upperCaseRequest = """
+				{"email":"Concurrent@Example.COM",
+				 "password":"%s",
+				 "confirmPassword":"%s"}
+				""".formatted(password, password);
+		CyclicBarrier start = new CyclicBarrier(2);
+
+		HttpResponse<String> first;
+		HttpResponse<String> second;
+		try (ExecutorService requests = Executors.newFixedThreadPool(2)) {
+			Future<HttpResponse<String>> firstRequest = requests
+				.submit(() -> postRegistrationAfter(start, lowerCaseRequest));
+			Future<HttpResponse<String>> secondRequest = requests
+				.submit(() -> postRegistrationAfter(start, upperCaseRequest));
+			first = firstRequest.get();
+			second = secondRequest.get();
+		}
+
+		assertThat(List.of(first.statusCode(), second.statusCode())).containsExactlyInAnyOrder(201, 409);
+		HttpResponse<String> conflict = first.statusCode() == 409 ? first : second;
+		assertThat(conflict.headers().firstValue("Content-Type")).contains("application/problem+json");
+		assertThat(conflict.body()).contains("\"code\":\"IAM_EMAIL_ALREADY_REGISTERED\"", "\"traceId\":\"")
+			.doesNotContain(password, "users_email_key", "SQLException");
+		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM users WHERE email = ?", Integer.class,
+				"concurrent@example.com"))
+			.isEqualTo(1);
+	}
+
+	@Test
+	void registrationWithValidSessionReturnsConflictBeforeCredentialValidation() throws Exception {
+		CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+		HttpClient client = HttpClient.newBuilder().cookieHandler(cookies).build();
+		String password = "correct horse battery staple";
+		HttpResponse<String> initial = postRegistration(client, """
+				{"email":"authenticated@example.com",
+				 "password":"%s",
+				 "confirmPassword":"%s",
+				 "futureField":true}
+				""".formatted(password, password), "application/json");
+		assertThat(initial.statusCode()).isEqualTo(201);
+
+		HttpResponse<String> conflict = postRegistration(client, """
+				{"email":"not-an-email",
+				 "password":"short",
+				 "confirmPassword":"different"}
+				""", "application/json");
+
+		assertThat(conflict.statusCode()).isEqualTo(409);
+		assertThat(conflict.headers().firstValue("Content-Type")).contains("application/problem+json");
+		assertThat(conflict.body()).contains("\"code\":\"IAM_ALREADY_AUTHENTICATED\"", "\"traceId\":\"")
+			.doesNotContain("not-an-email", "short", "different", "IAM_VALIDATION_FAILED");
+		HttpResponse<String> malformedConflict = postRegistration(client, "{", "application/json");
+		assertThat(malformedConflict.statusCode()).isEqualTo(409);
+		assertThat(malformedConflict.body()).contains("\"code\":\"IAM_ALREADY_AUTHENTICATED\"")
+			.doesNotContain("IAM_REQUEST_BODY_INVALID");
+		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM users WHERE email = ?", Integer.class,
+				"authenticated@example.com"))
+			.isEqualTo(1);
+		HttpResponse<String> profile = client.send(HttpRequest.newBuilder(uri("/user/profile")).GET().build(),
+				HttpResponse.BodyHandlers.ofString());
+		assertThat(profile.statusCode()).isEqualTo(200);
+		assertThat(profile.body()).contains("\"email\":\"authenticated@example.com\"");
+	}
+
 	@Test
 	void profileWithUnknownSessionIsUnauthenticated() throws Exception {
 		String unknownSession = Base64.getEncoder().encodeToString("unknown-session".getBytes(StandardCharsets.UTF_8));
@@ -213,6 +320,50 @@ class IamRegistrationProfileHttpTests {
 
 	private URI uri(String path) {
 		return URI.create("http://localhost:" + this.port + path);
+	}
+
+	private HttpResponse<String> postRegistration(HttpClient client, String body, String contentType) throws Exception {
+		return client.send(HttpRequest.newBuilder(uri("/auth/register"))
+			.header("Content-Type", contentType)
+			.POST(HttpRequest.BodyPublishers.ofString(body))
+			.build(), HttpResponse.BodyHandlers.ofString());
+	}
+
+	private HttpResponse<String> postRegistrationAfter(CyclicBarrier start, String body) throws Exception {
+		start.await();
+		return postRegistration(HttpClient.newHttpClient(), body, "application/json");
+	}
+
+	private static Stream<Arguments> invalidRegistrationRequests() {
+		return Stream.of(Arguments.of("body must be an object", "[]", "body", "IAM_REQUEST_BODY_INVALID"),
+				Arguments.of("malformed JSON", "{", "body", "IAM_REQUEST_BODY_INVALID"),
+				Arguments.of("email is required", """
+						{"password":"correct horse battery staple",
+						 "confirmPassword":"correct horse battery staple"}
+						""", "email", "IAM_FIELD_REQUIRED"), Arguments.of("email must be a string", """
+						{"email":42,
+						 "password":"correct horse battery staple",
+						 "confirmPassword":"correct horse battery staple"}
+						""", "email", "IAM_FIELD_TYPE_INVALID"), Arguments.of("email must be valid ASCII", """
+						{"email":"usér@example.com",
+						 "password":"correct horse battery staple",
+						 "confirmPassword":"correct horse battery staple"}
+						""", "email", "IAM_EMAIL_INVALID"), Arguments.of("password must be a string", """
+						{"email":"valid@example.com",
+						 "password":42,
+						 "confirmPassword":"correct horse battery staple"}
+						""", "password", "IAM_FIELD_TYPE_INVALID"), Arguments.of("password must meet its boundary", """
+						{"email":"valid@example.com",
+						 "password":"too short",
+						 "confirmPassword":"too short"}
+						""", "password", "IAM_PASSWORD_LENGTH_INVALID"), Arguments.of("confirmation is required", """
+						{"email":"valid@example.com",
+						 "password":"correct horse battery staple"}
+						""", "confirmPassword", "IAM_FIELD_REQUIRED"), Arguments.of("confirmation must match", """
+						{"email":"valid@example.com",
+						 "password":"correct horse battery staple",
+						 "confirmPassword":"different horse battery staple"}
+						""", "confirmPassword", "IAM_PASSWORD_CONFIRMATION_MISMATCH"));
 	}
 
 	private static void assertUnauthenticated(HttpResponse<String> response) {
