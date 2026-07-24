@@ -75,7 +75,7 @@ final class SessionExpiryFilter extends OncePerRequestFilter {
 		filterChain.doFilter(request, response);
 	}
 
-	private void reject(HttpServletRequest request, HttpServletResponse response) throws IOException {
+	void reject(HttpServletRequest request, HttpServletResponse response) throws IOException {
 		clearSessionCookie(request, response);
 		writeUnauthenticated(response);
 	}

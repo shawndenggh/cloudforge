@@ -17,15 +17,27 @@ package com.cloudforge.security;
 
 import java.util.UUID;
 
-public record TenantId(UUID value) {
+/**
+ * The only identity established by a valid CloudForge Session.
+ *
+ * @param userId the global User identifier
+ */
+public record SessionUser(UUID userId) {
 
-	public TenantId {
-		if (value == null) {
-			throw new IllegalArgumentException("Tenant ID is required");
+	public static final String SESSION_ATTRIBUTE = "user_id";
+
+	public SessionUser {
+		if (userId == null) {
+			throw new IllegalArgumentException("User ID is required");
 		}
 	}
 
-	public static TenantId parse(String value) {
-		return new TenantId(UUID.fromString(value));
+	public static SessionUser parse(String value) {
+		UUID userId = UUID.fromString(value);
+		if (!userId.toString().equals(value)) {
+			throw new IllegalArgumentException("User ID must be a canonical UUID");
+		}
+		return new SessionUser(userId);
 	}
+
 }

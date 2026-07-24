@@ -26,8 +26,9 @@ junitPlatformLauncher = { module = "org.junit.platform:junit-platform-launcher" 
 junitJupiter = { module = "org.junit.jupiter:junit-jupiter" }
 assertjCore = { module = "org.assertj:assertj-core" }
 springSecurityCore = { module = "org.springframework.security:spring-security-core" }
-springSecurityOauth2Jose = { module = "org.springframework.security:spring-security-oauth2-jose" }
-springSecurityOauth2ResourceServer = { module = "org.springframework.security:spring-security-oauth2-resource-server" }
+springSecurityWeb = { module = "org.springframework.security:spring-security-web" }
+springTest = { module = "org.springframework:spring-test" }
+jakartaServletApi = { module = "jakarta.servlet:jakarta.servlet-api" }
 
 [plugins]
 springBoot = { id = "org.springframework.boot", version.ref = "springBoot" }

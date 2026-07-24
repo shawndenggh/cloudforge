@@ -36,4 +36,13 @@ final class SecurityArchitectureTests {
 				"jakarta.persistence..", "org.hibernate..", "org.springframework.boot..")
 		.because("the security library must remain independent from Spring Boot and deployable services");
 
+	@ArchTest
+	static final ArchRule SECURITY_LIBRARY_HAS_NO_TENANT_OR_OAUTH2_IDENTITY_SEAM = ArchRuleDefinition.noClasses()
+		.should()
+		.haveSimpleNameContaining("Tenant")
+		.orShould()
+		.dependOnClassesThat()
+		.resideInAnyPackage("org.springframework.security.oauth2..")
+		.because("the shared identity seam carries only the trusted global user ID");
+
 }

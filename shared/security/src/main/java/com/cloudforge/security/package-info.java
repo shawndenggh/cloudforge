@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 /**
- * Tenant-aware Spring Security integration shared by resource services.
+ * Minimal Session User and trusted internal User integration shared by CloudForge
+ * services.
+ *
+ * <p>
+ * The trusted header adapter is valid only behind a private network boundary that accepts
+ * traffic exclusively from Gateway. It carries no Session, Tenant, Employee, role,
+ * permission, or User profile state.
  */
 @NullMarked
 package com.cloudforge.security;
