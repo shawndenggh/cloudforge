@@ -29,6 +29,8 @@ cloudforge:
   iam:
     registration-rate-limit:
       namespace: cloudforge:${APP_ENV:local}:iam:registration-rate-limit
+    login-rate-limit:
+      namespace: cloudforge:${APP_ENV:local}:iam:login-rate-limit
   security:
     secure-cookies: true
 

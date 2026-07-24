@@ -19,10 +19,13 @@ import java.time.Clock;
 import java.util.Objects;
 
 import com.cloudforge.iam.identity.DefaultIdentityModule;
+import com.cloudforge.iam.identity.DefaultLoginRateLimiter;
 import com.cloudforge.iam.identity.DefaultRegistrationRateLimiter;
 import com.cloudforge.iam.identity.IdentityModule;
 import com.cloudforge.iam.identity.IdentitySessionStore;
 import com.cloudforge.iam.identity.IdentityStore;
+import com.cloudforge.iam.identity.LoginRateLimiter;
+import com.cloudforge.iam.identity.LoginRateLimitStore;
 import com.cloudforge.iam.identity.PasswordHashUpgradeFailureRecorder;
 import com.cloudforge.iam.identity.PasswordHasher;
 import com.cloudforge.iam.identity.RegistrationRateLimiter;
@@ -73,10 +76,10 @@ class IdentityConfiguration {
 	@Bean
 	IdentityModule identityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
 			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock,
-			PasswordHashUpgradeFailureRecorder passwordHashUpgradeFailures) {
+			PasswordHashUpgradeFailureRecorder passwordHashUpgradeFailures, LoginRateLimiter loginRateLimiter) {
 		String dummyPasswordHash = passwordHasher.hash("CloudForge fixed dummy password credential");
 		return new DefaultIdentityModule(identityStore, passwordHasher, sessionStore, registrationRateLimiter, clock,
-				dummyPasswordHash, passwordHashUpgradeFailures);
+				dummyPasswordHash, passwordHashUpgradeFailures, loginRateLimiter);
 	}
 
 	@Bean
@@ -90,6 +93,11 @@ class IdentityConfiguration {
 	@Bean
 	RegistrationRateLimiter registrationRateLimiter(RegistrationRateLimitStore store, Clock clock) {
 		return new DefaultRegistrationRateLimiter(store, clock);
+	}
+
+	@Bean
+	LoginRateLimiter loginRateLimiter(LoginRateLimitStore store, Clock clock) {
+		return new DefaultLoginRateLimiter(store, clock);
 	}
 
 }

@@ -83,7 +83,8 @@ final class IdentityController {
 	ResponseEntity<Void> login(@RequestBody JsonNode body, HttpServletRequest servletRequest,
 			HttpServletResponse servletResponse) {
 		LoginRequest request = loginRequest(body);
-		Authentication authentication = this.identities.login(new LoginCommand(request.email(), request.password()));
+		Authentication authentication = this.identities
+			.login(new LoginCommand(request.email(), request.password(), TrustedClientIp.current(servletRequest)));
 		writeSessionCookie(servletRequest, servletResponse, authentication.sessionId());
 		expireCsrfCookie(servletResponse);
 		return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).build();

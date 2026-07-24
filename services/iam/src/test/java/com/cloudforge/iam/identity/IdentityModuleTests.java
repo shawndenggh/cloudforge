@@ -49,6 +49,8 @@ class IdentityModuleTests {
 
 	private static final String DUMMY_PASSWORD_HASH = "argon2:dummy password phrase";
 
+	private static final String CLIENT_IP = "192.0.2.10";
+
 	@Test
 	void registersUserAndCreatesUniqueSessionIdentity() {
 		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), testPasswordHasher(),
@@ -226,8 +228,9 @@ class IdentityModuleTests {
 				DUMMY_PASSWORD_HASH);
 
 		IdentityModule.Authentication first = module
-			.login(new LoginCommand("  Login@Example.COM ", decomposedPassword));
-		IdentityModule.Authentication second = module.login(new LoginCommand("login@example.com", normalizedPassword));
+			.login(new LoginCommand("  Login@Example.COM ", decomposedPassword, CLIENT_IP));
+		IdentityModule.Authentication second = module
+			.login(new LoginCommand("login@example.com", normalizedPassword, CLIENT_IP));
 
 		assertThat(first.sessionId()).isEqualTo("session-1");
 		assertThat(second.sessionId()).isEqualTo("session-2").isNotEqualTo(first.sessionId());
@@ -245,9 +248,11 @@ class IdentityModuleTests {
 				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC),
 				DUMMY_PASSWORD_HASH);
 
-		assertThatThrownBy(() -> module.login(new LoginCommand("known@example.com", "wrong password phrase")))
+		assertThatThrownBy(
+				() -> module.login(new LoginCommand("known@example.com", "wrong password phrase", CLIENT_IP)))
 			.isInstanceOf(InvalidCredentialsException.class);
-		assertThatThrownBy(() -> module.login(new LoginCommand("unknown@example.com", "wrong password phrase")))
+		assertThatThrownBy(
+				() -> module.login(new LoginCommand("unknown@example.com", "wrong password phrase", CLIENT_IP)))
 			.isInstanceOf(InvalidCredentialsException.class);
 
 		assertThat(passwordHasher.verifications()).containsExactly(
@@ -266,7 +271,7 @@ class IdentityModuleTests {
 				DUMMY_PASSWORD_HASH, failures);
 
 		IdentityModule.Authentication authentication = module
-			.login(new LoginCommand("upgrade@example.com", "correct password phrase"));
+			.login(new LoginCommand("upgrade@example.com", "correct password phrase", CLIENT_IP));
 
 		assertThat(authentication.sessionId()).isEqualTo("session-1");
 		assertThat(identities.findCredentialByEmail("upgrade@example.com"))
@@ -286,7 +291,7 @@ class IdentityModuleTests {
 				DUMMY_PASSWORD_HASH, failures);
 
 		IdentityModule.Authentication authentication = module
-			.login(new LoginCommand("current@example.com", "correct password phrase"));
+			.login(new LoginCommand("current@example.com", "correct password phrase", CLIENT_IP));
 
 		assertThat(authentication.sessionId()).isEqualTo("session-1");
 		assertThat(identities.findCredentialByEmail("current@example.com"))
@@ -306,13 +311,123 @@ class IdentityModuleTests {
 				DUMMY_PASSWORD_HASH, failures);
 
 		IdentityModule.Authentication authentication = module
-			.login(new LoginCommand("upgrade-failure@example.com", "correct password phrase"));
+			.login(new LoginCommand("upgrade-failure@example.com", "correct password phrase", CLIENT_IP));
 
 		assertThat(authentication.sessionId()).isEqualTo("session-1");
 		assertThat(identities.findCredentialByEmail("upgrade-failure@example.com"))
 			.contains(new PasswordCredential(USER_ID, "argon2:old-parameters"));
 		assertThat(identities.passwordHashUpdates()).isEqualTo(1);
 		assertThat(failures.count()).isEqualTo(1);
+	}
+
+	@Test
+	void appliesProgressiveEmailCooldownWithCapAndOneHourReset() {
+		MutableClock clock = new MutableClock(REGISTERED_AT);
+		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), testPasswordHasher(),
+				new InMemoryIdentitySessionStore(), noRateLimit(), clock, DUMMY_PASSWORD_HASH, () -> {
+				}, new DefaultLoginRateLimiter(new InMemoryLoginRateLimitStore(), clock));
+		LoginCommand command = new LoginCommand("unknown@example.com", "wrong password phrase", CLIENT_IP);
+
+		for (int attempt = 0; attempt < 4; attempt++) {
+			assertThatThrownBy(() -> module.login(command)).isInstanceOf(InvalidCredentialsException.class);
+		}
+		for (Duration cooldown : List.of(Duration.ofSeconds(30), Duration.ofMinutes(1), Duration.ofMinutes(2),
+				Duration.ofMinutes(4), Duration.ofMinutes(8), Duration.ofMinutes(15), Duration.ofMinutes(15))) {
+			assertLoginRateLimited(module, command, cooldown);
+			assertLoginRateLimited(module, command, cooldown);
+			clock.advance(cooldown);
+		}
+
+		clock.advance(Duration.ofHours(1));
+		assertThatThrownBy(() -> module.login(command)).isInstanceOf(InvalidCredentialsException.class);
+	}
+
+	@Test
+	void successfulLoginClearsOnlyTheEmailFailureSequence() {
+		MutableClock clock = new MutableClock(REGISTERED_AT);
+		InMemoryIdentityStore identities = new InMemoryIdentityStore();
+		identities.create("known@example.com", "argon2:correct password phrase", REGISTERED_AT);
+		IdentityModule module = new DefaultIdentityModule(identities, testPasswordHasher(),
+				new InMemoryIdentitySessionStore(), noRateLimit(), clock, DUMMY_PASSWORD_HASH, () -> {
+				}, new DefaultLoginRateLimiter(new InMemoryLoginRateLimitStore(), clock));
+		LoginCommand wrong = new LoginCommand("known@example.com", "wrong password phrase", CLIENT_IP);
+
+		for (int attempt = 0; attempt < 4; attempt++) {
+			assertThatThrownBy(() -> module.login(wrong)).isInstanceOf(InvalidCredentialsException.class);
+		}
+		assertLoginRateLimited(module, wrong, Duration.ofSeconds(30));
+		clock.advance(Duration.ofSeconds(30));
+
+		IdentityModule.Authentication authentication = module
+			.login(new LoginCommand("known@example.com", "correct password phrase", CLIENT_IP));
+
+		assertThat(authentication.sessionId()).isEqualTo("session-1");
+		for (int attempt = 0; attempt < 4; attempt++) {
+			assertThatThrownBy(() -> module.login(wrong)).isInstanceOf(InvalidCredentialsException.class);
+		}
+		assertLoginRateLimited(module, wrong, Duration.ofSeconds(30));
+	}
+
+	@Test
+	void unavailableLoginRateLimitStateFailsBeforeCredentialLookupOrPasswordVerification() {
+		InMemoryIdentityStore identities = new InMemoryIdentityStore();
+		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
+		Clock clock = Clock.fixed(REGISTERED_AT, ZoneOffset.UTC);
+		LoginRateLimitStore unavailableStore = new LoginRateLimitStore() {
+			@Override
+			public Duration check(String normalizedEmail, String clientIp, Instant now) {
+				throw new LoginRateLimitUnavailableException();
+			}
+
+			@Override
+			public Duration recordFailure(String normalizedEmail, String clientIp, Instant now) {
+				throw new AssertionError("Failure must not be recorded after an unavailable pre-check");
+			}
+
+			@Override
+			public void clearEmail(String normalizedEmail) {
+				throw new AssertionError("Success must not be recorded after an unavailable pre-check");
+			}
+		};
+		IdentityModule module = new DefaultIdentityModule(identities, passwordHasher,
+				new InMemoryIdentitySessionStore(), noRateLimit(), clock, DUMMY_PASSWORD_HASH, () -> {
+				}, new DefaultLoginRateLimiter(unavailableStore, clock));
+
+		assertThatThrownBy(
+				() -> module.login(new LoginCommand("unknown@example.com", "wrong password phrase", CLIENT_IP)))
+			.isInstanceOf(LoginRateLimitUnavailableException.class);
+		assertThat(identities.credentialLookups()).isZero();
+		assertThat(passwordHasher.verifications()).isEmpty();
+	}
+
+	@Test
+	void successfulLoginDoesNotClearTheSharedSourceFailureBudget() {
+		MutableClock clock = new MutableClock(REGISTERED_AT);
+		InMemoryIdentityStore identities = new InMemoryIdentityStore();
+		identities.create("known@example.com", "argon2:correct password phrase", REGISTERED_AT);
+		IdentityModule module = new DefaultIdentityModule(identities, testPasswordHasher(),
+				new InMemoryIdentitySessionStore(), noRateLimit(), clock, DUMMY_PASSWORD_HASH, () -> {
+				}, new DefaultLoginRateLimiter(new InMemoryLoginRateLimitStore(), clock));
+
+		for (int attempt = 0; attempt < 49; attempt++) {
+			LoginCommand failure = new LoginCommand("source-" + attempt + "@example.com", "wrong password phrase",
+					CLIENT_IP);
+			assertThatThrownBy(() -> module.login(failure)).isInstanceOf(InvalidCredentialsException.class);
+		}
+		IdentityModule.Authentication authentication = module
+			.login(new LoginCommand("known@example.com", "correct password phrase", CLIENT_IP));
+		assertThat(authentication.sessionId()).isEqualTo("session-1");
+		assertThatThrownBy(
+				() -> module.login(new LoginCommand("source-50@example.com", "wrong password phrase", CLIENT_IP)))
+			.isInstanceOf(InvalidCredentialsException.class);
+		assertLoginRateLimited(module, new LoginCommand("source-51@example.com", "wrong password phrase", CLIENT_IP),
+				Duration.ofMinutes(10));
+	}
+
+	private static void assertLoginRateLimited(IdentityModule module, LoginCommand command, Duration retryAfter) {
+		assertThatThrownBy(() -> module.login(command)).isInstanceOf(LoginRateLimitedException.class)
+			.satisfies(exception -> assertThat(((LoginRateLimitedException) exception).retryAfter())
+				.isEqualTo(retryAfter));
 	}
 
 	private static RegistrationRateLimiter noRateLimit() {
@@ -428,6 +543,8 @@ class IdentityModuleTests {
 
 		private final AtomicInteger passwordHashUpdates = new AtomicInteger();
 
+		private final AtomicInteger credentialLookups = new AtomicInteger();
+
 		private boolean failPasswordHashUpdates;
 
 		@Override
@@ -447,6 +564,7 @@ class IdentityModuleTests {
 
 		@Override
 		public Optional<PasswordCredential> findCredentialByEmail(String email) {
+			this.credentialLookups.incrementAndGet();
 			return this.users.values()
 				.stream()
 				.filter(user -> user.email().equals(email))
@@ -477,6 +595,10 @@ class IdentityModuleTests {
 
 		int passwordHashUpdates() {
 			return this.passwordHashUpdates.get();
+		}
+
+		int credentialLookups() {
+			return this.credentialLookups.get();
 		}
 
 		void failPasswordHashUpdates() {
@@ -568,10 +690,94 @@ class IdentityModuleTests {
 
 	}
 
+	private static final class InMemoryLoginRateLimitStore implements LoginRateLimitStore {
+
+		private static final Duration EMAIL_EXPIRY = Duration.ofHours(1);
+
+		private static final Duration SOURCE_WINDOW = Duration.ofMinutes(10);
+
+		private static final Duration SOURCE_COOLDOWN = Duration.ofMinutes(10);
+
+		private final Map<String, EmailFailureState> emails = new HashMap<>();
+
+		private final Map<String, SourceFailureState> sources = new HashMap<>();
+
+		@Override
+		public Duration check(String normalizedEmail, String clientIp, Instant now) {
+			EmailFailureState email = currentEmail(normalizedEmail, now);
+			SourceFailureState source = currentSource(clientIp, now);
+			return maximum(remaining(email.cooldownUntil(), now), remaining(source.cooldownUntil(), now));
+		}
+
+		@Override
+		public Duration recordFailure(String normalizedEmail, String clientIp, Instant now) {
+			EmailFailureState currentEmail = currentEmail(normalizedEmail, now);
+			int failureCount = currentEmail.failureCount() + 1;
+			Duration emailCooldown = emailCooldown(failureCount);
+			this.emails.put(normalizedEmail, new EmailFailureState(failureCount, now, now.plus(emailCooldown)));
+
+			SourceFailureState currentSource = currentSource(clientIp, now);
+			int sourceFailures = currentSource.failureCount() + 1;
+			Instant sourceCooldownUntil = sourceFailures > 50 ? now.plus(SOURCE_COOLDOWN) : now;
+			this.sources.put(clientIp,
+					new SourceFailureState(sourceFailures, currentSource.windowStartedAt(), sourceCooldownUntil));
+			return maximum(emailCooldown, remaining(sourceCooldownUntil, now));
+		}
+
+		@Override
+		public void clearEmail(String normalizedEmail) {
+			this.emails.remove(normalizedEmail);
+		}
+
+		private EmailFailureState currentEmail(String email, Instant now) {
+			EmailFailureState state = this.emails.get(email);
+			if (state == null || !now.isBefore(state.lastFailureAt().plus(EMAIL_EXPIRY))) {
+				return new EmailFailureState(0, now, now);
+			}
+			return state;
+		}
+
+		private SourceFailureState currentSource(String clientIp, Instant now) {
+			SourceFailureState state = this.sources.get(clientIp);
+			if (state == null || (!now.isBefore(state.cooldownUntil())
+					&& !now.isBefore(state.windowStartedAt().plus(SOURCE_WINDOW)))) {
+				return new SourceFailureState(0, now, now);
+			}
+			return state;
+		}
+
+		private static Duration emailCooldown(int failureCount) {
+			return switch (failureCount) {
+				case 1, 2, 3, 4 -> Duration.ZERO;
+				case 5 -> Duration.ofSeconds(30);
+				case 6 -> Duration.ofMinutes(1);
+				case 7 -> Duration.ofMinutes(2);
+				case 8 -> Duration.ofMinutes(4);
+				case 9 -> Duration.ofMinutes(8);
+				default -> Duration.ofMinutes(15);
+			};
+		}
+
+		private static Duration remaining(Instant until, Instant now) {
+			return now.isBefore(until) ? Duration.between(now, until) : Duration.ZERO;
+		}
+
+		private static Duration maximum(Duration first, Duration second) {
+			return first.compareTo(second) >= 0 ? first : second;
+		}
+
+	}
+
 	private record BucketState(long tokenUnits, Instant updatedAt) {
 	}
 
 	private record PasswordVerification(String password, String passwordHash) {
+	}
+
+	private record EmailFailureState(int failureCount, Instant lastFailureAt, Instant cooldownUntil) {
+	}
+
+	private record SourceFailureState(int failureCount, Instant windowStartedAt, Instant cooldownUntil) {
 	}
 
 	private static final class RecordingPasswordHashUpgradeFailureRecorder
