@@ -4,6 +4,13 @@ spring:
   threads:
     virtual:
       enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  session:
+    redis:
+      namespace: cloudforge:${APP_ENV:local}:session
   cloud:
     gateway:
       server:
@@ -22,6 +29,14 @@ cloudforge:
 
 server:
   port: ${GATEWAY_SERVER_PORT:${SERVER_PORT:8080}}
+  servlet:
+    session:
+      cookie:
+        name: cloudforge_session
+        path: /
+        http-only: true
+        secure: ${cloudforge.security.secure-cookies}
+        same-site: lax
 
 management:
   endpoints:

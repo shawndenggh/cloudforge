@@ -12,7 +12,6 @@ RABBITMQ_MANAGEMENT_PORT ?= 15672
 REDIS_PORT ?= 6379
 IAM_SERVER_PORT ?= 9000
 GATEWAY_SERVER_PORT ?= 8080
-IAM_ISSUER ?= http://localhost:$(IAM_SERVER_PORT)
 IAM_BASE_URL ?= http://localhost:$(IAM_SERVER_PORT)
 
 export POSTGRES_PORT
@@ -21,7 +20,6 @@ export RABBITMQ_MANAGEMENT_PORT
 export REDIS_PORT
 export IAM_SERVER_PORT
 export GATEWAY_SERVER_PORT
-export IAM_ISSUER
 export IAM_BASE_URL
 
 .PHONY: help doctor init format check test infra-up infra-down down infra-logs status run up

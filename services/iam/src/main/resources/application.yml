@@ -23,20 +23,21 @@ spring:
     password: ${RABBITMQ_PASSWORD:}
   session:
     redis:
-      namespace: cf:${APP_ENV:local}:iam:session
+      namespace: cloudforge:${APP_ENV:local}:session
+
+cloudforge:
   security:
-    oauth2:
-      authorizationserver:
-        issuer: ${IAM_ISSUER:http://localhost:9000}
+    secure-cookies: true
 
 server:
   port: ${IAM_SERVER_PORT:${SERVER_PORT:9000}}
   servlet:
     session:
       cookie:
-        name: IAMSESSION
+        name: cloudforge_session
+        path: /
         http-only: true
-        secure: ${SESSION_COOKIE_SECURE:false}
+        secure: ${cloudforge.security.secure-cookies}
         same-site: lax
 
 management:
@@ -48,3 +49,13 @@ management:
     health:
       probes:
         enabled: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+cloudforge:
+  security:
+    secure-cookies: false
