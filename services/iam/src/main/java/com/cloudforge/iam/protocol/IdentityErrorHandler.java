@@ -25,6 +25,8 @@ import java.util.regex.Pattern;
 import com.cloudforge.iam.identity.EmailAlreadyRegisteredException;
 import com.cloudforge.iam.identity.IdentityValidationException;
 import com.cloudforge.iam.identity.InvalidCredentialsException;
+import com.cloudforge.iam.identity.LoginRateLimitUnavailableException;
+import com.cloudforge.iam.identity.LoginRateLimitedException;
 import com.cloudforge.iam.identity.LoginSessionUnavailableException;
 import com.cloudforge.iam.identity.RegistrationRateLimitedException;
 import com.cloudforge.iam.identity.RegistrationRateLimitUnavailableException;
@@ -150,6 +152,30 @@ final class IdentityErrorHandler {
 		problem.setTitle("Session unavailable");
 		problem.setProperty("code", "IAM_SESSION_UNAVAILABLE");
 		complete(problem, request, "iam", "session-unavailable");
+		return problem;
+	}
+
+	@ExceptionHandler(LoginRateLimitedException.class)
+	ResponseEntity<ProblemDetail> loginRateLimited(LoginRateLimitedException exception, HttpServletRequest request) {
+		long retryAfterSeconds = Math.ceilDiv(exception.retryAfter().toMillis(), 1_000);
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS,
+				"Login attempts are temporarily limited.");
+		problem.setTitle("Login rate limited");
+		problem.setProperty("code", "IAM_LOGIN_RATE_LIMITED");
+		problem.setProperty("retryAfterSeconds", retryAfterSeconds);
+		complete(problem, request, "iam", "login-rate-limited");
+		return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+			.header(HttpHeaders.RETRY_AFTER, Long.toString(retryAfterSeconds))
+			.body(problem);
+	}
+
+	@ExceptionHandler(LoginRateLimitUnavailableException.class)
+	ProblemDetail loginRateLimitUnavailable(HttpServletRequest request) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+				"Login is temporarily unavailable.");
+		problem.setTitle("Dependency unavailable");
+		problem.setProperty("code", "PLATFORM_DEPENDENCY_UNAVAILABLE");
+		complete(problem, request, "platform", "dependency-unavailable");
 		return problem;
 	}
 

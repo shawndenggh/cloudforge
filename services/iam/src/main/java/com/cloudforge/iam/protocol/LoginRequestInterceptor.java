@@ -15,33 +15,22 @@
  */
 package com.cloudforge.iam.protocol;
 
-import com.cloudforge.iam.identity.IdentityModule;
-import com.cloudforge.iam.identity.RegistrationRateLimitUnavailableException;
+import com.cloudforge.iam.identity.LoginRateLimitUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import org.springframework.web.servlet.HandlerInterceptor;
 
-final class RegistrationRequestInterceptor implements HandlerInterceptor {
-
-	private final IdentityModule identities;
-
-	RegistrationRequestInterceptor(IdentityModule identities) {
-		this.identities = identities;
-	}
+final class LoginRequestInterceptor implements HandlerInterceptor {
 
 	@Override
 	public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-		checkSource(request);
-		return true;
-	}
-
-	private void checkSource(HttpServletRequest request) {
 		try {
-			this.identities.checkRegistrationSource(TrustedClientIp.resolve(request));
+			TrustedClientIp.resolve(request);
+			return true;
 		}
 		catch (IllegalArgumentException exception) {
-			throw new RegistrationRateLimitUnavailableException();
+			throw new LoginRateLimitUnavailableException();
 		}
 	}
 

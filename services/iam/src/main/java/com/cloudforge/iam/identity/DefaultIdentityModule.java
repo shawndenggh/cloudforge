@@ -30,6 +30,20 @@ public final class DefaultIdentityModule implements IdentityModule {
 
 	private static final int SESSION_CREATION_ATTEMPTS = 3;
 
+	private static final LoginRateLimiter NO_LOGIN_RATE_LIMIT = new LoginRateLimiter() {
+		@Override
+		public void check(String normalizedEmail, String clientIp) {
+		}
+
+		@Override
+		public void recordFailure(String normalizedEmail, String clientIp) {
+		}
+
+		@Override
+		public void recordSuccess(String normalizedEmail) {
+		}
+	};
+
 	private final IdentityStore identityStore;
 
 	private final PasswordHasher passwordHasher;
@@ -44,6 +58,8 @@ public final class DefaultIdentityModule implements IdentityModule {
 
 	private final PasswordHashUpgradeFailureRecorder passwordHashUpgradeFailures;
 
+	private final LoginRateLimiter loginRateLimiter;
+
 	public DefaultIdentityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
 			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock,
 			String dummyPasswordHash) {
@@ -54,6 +70,14 @@ public final class DefaultIdentityModule implements IdentityModule {
 	public DefaultIdentityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
 			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock,
 			String dummyPasswordHash, PasswordHashUpgradeFailureRecorder passwordHashUpgradeFailures) {
+		this(identityStore, passwordHasher, sessionStore, registrationRateLimiter, clock, dummyPasswordHash,
+				passwordHashUpgradeFailures, NO_LOGIN_RATE_LIMIT);
+	}
+
+	public DefaultIdentityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
+			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock,
+			String dummyPasswordHash, PasswordHashUpgradeFailureRecorder passwordHashUpgradeFailures,
+			LoginRateLimiter loginRateLimiter) {
 		this.identityStore = identityStore;
 		this.passwordHasher = passwordHasher;
 		this.sessionStore = sessionStore;
@@ -61,6 +85,7 @@ public final class DefaultIdentityModule implements IdentityModule {
 		this.clock = clock;
 		this.dummyPasswordHash = dummyPasswordHash;
 		this.passwordHashUpgradeFailures = passwordHashUpgradeFailures;
+		this.loginRateLimiter = loginRateLimiter;
 	}
 
 	@Override
@@ -95,13 +120,16 @@ public final class DefaultIdentityModule implements IdentityModule {
 			throw new IdentityValidationException(errors);
 		}
 
+		this.loginRateLimiter.check(email, command.clientIp());
 		Optional<PasswordCredential> credential = this.identityStore.findCredentialByEmail(email);
 		String passwordHash = credential.map(PasswordCredential::passwordHash).orElse(this.dummyPasswordHash);
 		boolean matches = this.passwordHasher.matches(password, passwordHash);
 		if (credential.isEmpty() || !matches) {
+			this.loginRateLimiter.recordFailure(email, command.clientIp());
 			throw new InvalidCredentialsException();
 		}
 		PasswordCredential verifiedCredential = credential.orElseThrow();
+		this.loginRateLimiter.recordSuccess(email);
 		upgradePasswordHash(password, verifiedCredential);
 		return new Authentication(createSession(verifiedCredential.userId(), false));
 	}

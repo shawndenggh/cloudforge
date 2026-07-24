@@ -15,35 +15,21 @@
  */
 package com.cloudforge.iam.identity;
 
-import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
+import java.time.Duration;
 
-public interface IdentityModule {
+public final class LoginRateLimitedException extends RuntimeException {
 
-	Registration register(RegisterCommand command);
+	private static final long serialVersionUID = 1L;
 
-	Authentication login(LoginCommand command);
+	private final transient Duration retryAfter;
 
-	void checkRegistrationSource(String clientIp);
-
-	void checkRegistrationEmail(String email);
-
-	Optional<UserProfile> findUser(UUID userId);
-
-	record RegisterCommand(String email, String password, String confirmPassword) {
+	LoginRateLimitedException(Duration retryAfter) {
+		super("Login rate limit exceeded");
+		this.retryAfter = retryAfter;
 	}
 
-	record LoginCommand(String email, String password, String clientIp) {
-	}
-
-	record Registration(UserProfile user, String sessionId) {
-	}
-
-	record Authentication(String sessionId) {
-	}
-
-	record UserProfile(UUID id, String email, Instant registeredAt) {
+	public Duration retryAfter() {
+		return this.retryAfter;
 	}
 
 }

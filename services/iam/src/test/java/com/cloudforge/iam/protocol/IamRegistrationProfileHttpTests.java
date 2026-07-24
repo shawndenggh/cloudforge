@@ -227,6 +227,7 @@ class IamRegistrationProfileHttpTests {
 		HttpResponse<String> login = HttpClient.newHttpClient()
 			.send(HttpRequest.newBuilder(uri("/auth/login"))
 				.header("Content-Type", "application/json")
+				.header("X-CloudForge-Client-IP", nextClientIp())
 				.header("Cookie", "cloudforge_session=" + clientChosenSession)
 				.POST(HttpRequest.BodyPublishers.ofString("""
 						{"email":"session-fixation@example.com",
@@ -262,6 +263,61 @@ class IamRegistrationProfileHttpTests {
 		assertInvalidCredentials(wrongPassword);
 		assertInvalidCredentials(unknownEmail);
 		assertThat(withoutTraceId(wrongPassword.body())).isEqualTo(withoutTraceId(unknownEmail.body()));
+	}
+
+	@Test
+	void fifthFailureForAnUnknownEmailStartsThirtySecondCooldown() throws Exception {
+		String email = "unknown-rate-limited@example.com";
+		String clientIp = nextClientIp();
+		String body = """
+				{"email":"%s",
+				 "password":"wrong password phrase"}
+				""".formatted(email);
+		for (int attempt = 0; attempt < 4; attempt++) {
+			assertInvalidCredentials(postLogin(HttpClient.newHttpClient(), body, clientIp));
+		}
+
+		HttpResponse<String> limited = postLogin(HttpClient.newHttpClient(), body, clientIp);
+		HttpResponse<String> stillLimited = postLogin(HttpClient.newHttpClient(), body, clientIp);
+
+		assertLoginRateLimited(limited, 30);
+		assertLoginRateLimited(stillLimited, 30);
+		Set<String> keys = this.redis.keys("cloudforge:local:iam:login-rate-limit:*");
+		assertThat(keys).hasSizeGreaterThanOrEqualTo(2).noneMatch(key -> key.contains(email) || key.contains(clientIp));
+		assertThat(keys)
+			.allSatisfy(key -> assertThat(this.redis.getExpire(key, TimeUnit.SECONDS)).isBetween(1L, 3600L));
+	}
+
+	@Test
+	void fiftyFirstFailureFromOneTrustedSourceStartsTenMinuteCooldown() throws Exception {
+		String clientIp = "198.51.100.88";
+		for (int attempt = 0; attempt < 50; attempt++) {
+			HttpResponse<String> failed = postLogin(HttpClient.newHttpClient(), """
+					{"email":"source-budget-%d@example.com",
+					 "password":"wrong password phrase"}
+					""".formatted(attempt), clientIp);
+			assertInvalidCredentials(failed);
+		}
+
+		HttpResponse<String> limited = postLogin(HttpClient.newHttpClient(), """
+				{"email":"source-budget-overflow@example.com",
+				 "password":"wrong password phrase"}
+				""", clientIp);
+
+		assertLoginRateLimited(limited, 600);
+	}
+
+	@Test
+	void loginFailsClosedWithoutTrustedClientIp() throws Exception {
+		HttpResponse<String> response = HttpClient.newHttpClient()
+			.send(HttpRequest.newBuilder(uri("/auth/login"))
+				.header("Content-Type", "application/json")
+				.POST(HttpRequest.BodyPublishers.ofString("{"))
+				.build(), HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(503);
+		assertThat(response.body()).contains("\"code\":\"PLATFORM_DEPENDENCY_UNAVAILABLE\"", "\"traceId\":\"")
+			.doesNotContain("X-CloudForge-Client-IP");
 	}
 
 	@Test
@@ -588,8 +644,13 @@ class IamRegistrationProfileHttpTests {
 	}
 
 	private HttpResponse<String> postLogin(HttpClient client, String body) throws Exception {
+		return postLogin(client, body, nextClientIp());
+	}
+
+	private HttpResponse<String> postLogin(HttpClient client, String body, String clientIp) throws Exception {
 		return client.send(HttpRequest.newBuilder(uri("/auth/login"))
 			.header("Content-Type", "application/json")
+			.header("X-CloudForge-Client-IP", clientIp)
 			.POST(HttpRequest.BodyPublishers.ofString(body))
 			.build(), HttpResponse.BodyHandlers.ofString());
 	}
@@ -666,6 +727,14 @@ class IamRegistrationProfileHttpTests {
 					"\"title\":\"Invalid credentials\"", "\"code\":\"IAM_INVALID_CREDENTIALS\"", "\"traceId\":\"")
 			.doesNotContain("credential-check@example.com", "missing@example.com", "wrong password phrase",
 					"password_hash", "argon2");
+	}
+
+	private static void assertLoginRateLimited(HttpResponse<String> response, long retryAfterSeconds) {
+		assertThat(response.statusCode()).isEqualTo(429);
+		assertThat(response.headers().firstValue("Retry-After")).hasValue(Long.toString(retryAfterSeconds));
+		assertThat(response.body()).contains("\"type\":\"urn:cloudforge:problem:iam:login-rate-limited\"",
+				"\"code\":\"IAM_LOGIN_RATE_LIMITED\"", "\"retryAfterSeconds\":" + retryAfterSeconds, "\"traceId\":\"")
+			.doesNotContain("password", "email", "argon2");
 	}
 
 	private static String sessionCookie(CookieManager cookies) {
