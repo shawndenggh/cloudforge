@@ -23,6 +23,8 @@ import java.util.UUID;
 import com.cloudforge.iam.identity.IdentityValidationException;
 import com.cloudforge.iam.identity.IdentityValidationException.FieldError;
 import com.cloudforge.iam.identity.IdentityModule;
+import com.cloudforge.iam.identity.IdentityModule.Authentication;
+import com.cloudforge.iam.identity.IdentityModule.LoginCommand;
 import com.cloudforge.iam.identity.IdentityModule.RegisterCommand;
 import com.cloudforge.iam.identity.IdentityModule.Registration;
 import com.cloudforge.iam.identity.IdentityModule.UserProfile;
@@ -72,10 +74,28 @@ final class IdentityController {
 		RegistrationRequest request = registrationRequest(body);
 		Registration registration = this.identities
 			.register(new RegisterCommand(request.email(), request.password(), request.confirmPassword()));
-		CookieValue sessionCookie = new CookieValue(servletRequest, servletResponse, registration.sessionId());
+		writeSessionCookie(servletRequest, servletResponse, registration.sessionId());
+		expireCsrfCookie(servletResponse);
+		return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).build();
+	}
+
+	@PostMapping(path = "/auth/login", consumes = MediaType.APPLICATION_JSON_VALUE)
+	ResponseEntity<Void> login(@RequestBody JsonNode body, HttpServletRequest servletRequest,
+			HttpServletResponse servletResponse) {
+		LoginRequest request = loginRequest(body);
+		Authentication authentication = this.identities.login(new LoginCommand(request.email(), request.password()));
+		writeSessionCookie(servletRequest, servletResponse, authentication.sessionId());
+		expireCsrfCookie(servletResponse);
+		return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).build();
+	}
+
+	private void writeSessionCookie(HttpServletRequest request, HttpServletResponse response, String sessionId) {
+		CookieValue sessionCookie = new CookieValue(request, response, sessionId);
 		sessionCookie.setCookieMaxAge(Math.toIntExact(SESSION_COOKIE_MAX_AGE.toSeconds()));
 		this.cookieSerializer.writeCookieValue(sessionCookie);
+	}
 
+	private void expireCsrfCookie(HttpServletResponse response) {
 		ResponseCookie expiredCsrfCookie = ResponseCookie.from("cloudforge_csrf_token", "")
 			.path("/")
 			.httpOnly(false)
@@ -83,8 +103,7 @@ final class IdentityController {
 			.sameSite("Lax")
 			.maxAge(Duration.ZERO)
 			.build();
-		servletResponse.addHeader(HttpHeaders.SET_COOKIE, expiredCsrfCookie.toString());
-		return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).build();
+		response.addHeader(HttpHeaders.SET_COOKIE, expiredCsrfCookie.toString());
 	}
 
 	@GetMapping("/user/profile")
@@ -139,6 +158,20 @@ final class IdentityController {
 		return new RegistrationRequest(email, password, confirmPassword);
 	}
 
+	private static LoginRequest loginRequest(JsonNode body) {
+		if (!body.isObject()) {
+			throw new IdentityValidationException(List.of(new FieldError("body", "IAM_REQUEST_BODY_INVALID")));
+		}
+
+		List<FieldError> errors = new ArrayList<>();
+		String email = requiredString(body, "email", errors);
+		String password = requiredString(body, "password", errors);
+		if (!errors.isEmpty()) {
+			throw new IdentityValidationException(errors);
+		}
+		return new LoginRequest(email, password);
+	}
+
 	private static String requiredString(JsonNode body, String field, List<FieldError> errors) {
 		JsonNode value = body.get(field);
 		if (value == null || value.isNull()) {
@@ -153,6 +186,9 @@ final class IdentityController {
 	}
 
 	record RegistrationRequest(String email, String password, String confirmPassword) {
+	}
+
+	record LoginRequest(String email, String password) {
 	}
 
 }

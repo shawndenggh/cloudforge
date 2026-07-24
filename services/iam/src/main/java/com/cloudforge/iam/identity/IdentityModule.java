@@ -23,6 +23,8 @@ public interface IdentityModule {
 
 	Registration register(RegisterCommand command);
 
+	Authentication login(LoginCommand command);
+
 	void checkRegistrationSource(String clientIp);
 
 	void checkRegistrationEmail(String email);
@@ -32,7 +34,13 @@ public interface IdentityModule {
 	record RegisterCommand(String email, String password, String confirmPassword) {
 	}
 
+	record LoginCommand(String email, String password) {
+	}
+
 	record Registration(UserProfile user, String sessionId) {
+	}
+
+	record Authentication(String sessionId) {
 	}
 
 	record UserProfile(UUID id, String email, Instant registeredAt) {

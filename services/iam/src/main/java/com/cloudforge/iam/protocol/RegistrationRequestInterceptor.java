@@ -18,19 +18,14 @@ package com.cloudforge.iam.protocol;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.UUID;
-
 import com.cloudforge.iam.identity.IdentityModule;
 import com.cloudforge.iam.identity.RegistrationRateLimitUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 
 import org.springframework.web.servlet.HandlerInterceptor;
 
 final class RegistrationRequestInterceptor implements HandlerInterceptor {
-
-	private static final String USER_ID_ATTRIBUTE = "user_id";
 
 	private final IdentityModule identities;
 
@@ -40,27 +35,6 @@ final class RegistrationRequestInterceptor implements HandlerInterceptor {
 
 	@Override
 	public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-		HttpSession session = request.getSession(false);
-		if (session == null) {
-			checkSource(request);
-			return true;
-		}
-
-		Object userId = session.getAttribute(USER_ID_ATTRIBUTE);
-		if (!(userId instanceof String value)) {
-			session.invalidate();
-			checkSource(request);
-			return true;
-		}
-		try {
-			if (this.identities.findUser(UUID.fromString(value)).isPresent()) {
-				throw new AlreadyAuthenticatedException();
-			}
-		}
-		catch (IllegalArgumentException exception) {
-			// Invalid identity attributes are treated as an anonymous request.
-		}
-		session.invalidate();
 		checkSource(request);
 		return true;
 	}

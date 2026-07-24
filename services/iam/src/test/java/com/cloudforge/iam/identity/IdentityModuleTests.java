@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 
 import com.cloudforge.iam.identity.IdentityModule.RegisterCommand;
+import com.cloudforge.iam.identity.IdentityModule.LoginCommand;
 import com.cloudforge.iam.identity.IdentityModule.UserProfile;
 
 import org.junit.jupiter.api.Test;
@@ -45,10 +46,13 @@ class IdentityModuleTests {
 
 	private static final UUID USER_ID = UUID.fromString("018f0c24-7a00-7000-8000-000000000001");
 
+	private static final String DUMMY_PASSWORD_HASH = "argon2:dummy password phrase";
+
 	@Test
 	void registersUserAndCreatesUniqueSessionIdentity() {
-		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), password -> "argon2:" + password,
-				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), testPasswordHasher(),
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC),
+				DUMMY_PASSWORD_HASH);
 
 		IdentityModule.Registration registration = module.register(new RegisterCommand("  New.User@Example.COM ",
 				"correct horse battery staple", "correct horse battery staple"));
@@ -66,7 +70,8 @@ class IdentityModuleTests {
 			String expectedNormalizedPassword) {
 		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
 		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), passwordHasher,
-				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC),
+				DUMMY_PASSWORD_HASH);
 
 		module.register(new RegisterCommand("valid@example.com", password, confirmation));
 
@@ -79,7 +84,8 @@ class IdentityModuleTests {
 			String expectedField, String expectedCode) {
 		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
 		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), passwordHasher,
-				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC),
+				DUMMY_PASSWORD_HASH);
 
 		assertThatThrownBy(() -> module.register(new RegisterCommand("valid@example.com", password, confirmation)))
 			.isInstanceOf(IdentityValidationException.class)
@@ -93,7 +99,8 @@ class IdentityModuleTests {
 		String maximumEmail = "a".repeat(64) + "@" + "b".repeat(63) + "." + "c".repeat(63) + "." + "d".repeat(61);
 		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
 		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), passwordHasher,
-				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC),
+				DUMMY_PASSWORD_HASH);
 
 		IdentityModule.Registration registration = module.register(
 				new RegisterCommand(maximumEmail, "correct horse battery staple", "correct horse battery staple"));
@@ -109,9 +116,10 @@ class IdentityModuleTests {
 	@Test
 	void limitsRegistrationSourceBurstAndHourlyRateWithRetryAfter() {
 		MutableClock clock = new MutableClock(REGISTERED_AT);
-		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), password -> "unused",
+		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), testPasswordHasher(),
 				new InMemoryIdentitySessionStore(),
-				new DefaultRegistrationRateLimiter(new InMemoryRegistrationRateLimitStore(), clock), clock);
+				new DefaultRegistrationRateLimiter(new InMemoryRegistrationRateLimitStore(), clock), clock,
+				DUMMY_PASSWORD_HASH);
 
 		for (int attempt = 0; attempt < 5; attempt++) {
 			module.checkRegistrationSource("192.0.2.10");
@@ -139,7 +147,8 @@ class IdentityModuleTests {
 		InMemoryIdentityStore identities = new InMemoryIdentityStore();
 		IdentityModule module = new DefaultIdentityModule(identities, passwordHasher,
 				new InMemoryIdentitySessionStore(),
-				new DefaultRegistrationRateLimiter(new InMemoryRegistrationRateLimitStore(), clock), clock);
+				new DefaultRegistrationRateLimiter(new InMemoryRegistrationRateLimitStore(), clock), clock,
+				DUMMY_PASSWORD_HASH);
 		RegisterCommand command = new RegisterCommand(" Rate.Limited@Example.COM ", "correct horse battery staple",
 				"correct horse battery staple");
 
@@ -164,7 +173,7 @@ class IdentityModuleTests {
 		IdentityModule module = new DefaultIdentityModule(identities, passwordHasher,
 				new InMemoryIdentitySessionStore(), new DefaultRegistrationRateLimiter((buckets, now) -> {
 					throw new RegistrationRateLimitUnavailableException();
-				}, clock), clock);
+				}, clock), clock, DUMMY_PASSWORD_HASH);
 
 		assertThatThrownBy(() -> module.checkRegistrationEmail("valid@example.com"))
 			.isInstanceOf(RegistrationRateLimitUnavailableException.class);
@@ -177,8 +186,8 @@ class IdentityModuleTests {
 		InMemoryIdentityStore identities = new InMemoryIdentityStore();
 		AlwaysFailingIdentitySessionStore sessions = new AlwaysFailingIdentitySessionStore(
 				() -> identities.creates() == 1);
-		IdentityModule module = new DefaultIdentityModule(identities, password -> "argon2:" + password, sessions,
-				noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+		IdentityModule module = new DefaultIdentityModule(identities, testPasswordHasher(), sessions, noRateLimit(),
+				Clock.fixed(REGISTERED_AT, ZoneOffset.UTC), DUMMY_PASSWORD_HASH);
 
 		assertThatThrownBy(() -> module.register(new RegisterCommand("recoverable@example.com",
 				"correct horse battery staple", "correct horse battery staple")))
@@ -194,14 +203,55 @@ class IdentityModuleTests {
 	@Test
 	void returnsRegistrationWhenSessionCreationRecoversWithinRetryBoundary() {
 		RecoveringIdentitySessionStore sessions = new RecoveringIdentitySessionStore();
-		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), password -> "argon2:" + password,
-				sessions, noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC));
+		IdentityModule module = new DefaultIdentityModule(new InMemoryIdentityStore(), testPasswordHasher(), sessions,
+				noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC), DUMMY_PASSWORD_HASH);
 
 		IdentityModule.Registration registration = module.register(new RegisterCommand("retry@example.com",
 				"correct horse battery staple", "correct horse battery staple"));
 
 		assertThat(registration.sessionId()).isEqualTo("recovered-session");
 		assertThat(sessions.attempts()).isEqualTo(3);
+	}
+
+	@Test
+	void logsInWithNormalizedEmailAndCreatesANewSessionForEverySuccess() {
+		String normalizedPassword = "caf\u00e9 password phrase";
+		String decomposedPassword = "cafe\u0301 password phrase";
+		InMemoryIdentityStore identities = new InMemoryIdentityStore();
+		identities.create("login@example.com", "argon2:" + normalizedPassword, REGISTERED_AT);
+		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
+		IdentityModule module = new DefaultIdentityModule(identities, passwordHasher,
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC),
+				DUMMY_PASSWORD_HASH);
+
+		IdentityModule.Authentication first = module
+			.login(new LoginCommand("  Login@Example.COM ", decomposedPassword));
+		IdentityModule.Authentication second = module.login(new LoginCommand("login@example.com", normalizedPassword));
+
+		assertThat(first.sessionId()).isEqualTo("session-1");
+		assertThat(second.sessionId()).isEqualTo("session-2").isNotEqualTo(first.sessionId());
+		assertThat(passwordHasher.verifications()).containsExactly(
+				new PasswordVerification(normalizedPassword, "argon2:" + normalizedPassword),
+				new PasswordVerification(normalizedPassword, "argon2:" + normalizedPassword));
+	}
+
+	@Test
+	void wrongPasswordAndUnknownEmailUseTheSameFailureAndPasswordVerificationPath() {
+		InMemoryIdentityStore identities = new InMemoryIdentityStore();
+		identities.create("known@example.com", "argon2:correct password phrase", REGISTERED_AT);
+		RecordingPasswordHasher passwordHasher = new RecordingPasswordHasher();
+		IdentityModule module = new DefaultIdentityModule(identities, passwordHasher,
+				new InMemoryIdentitySessionStore(), noRateLimit(), Clock.fixed(REGISTERED_AT, ZoneOffset.UTC),
+				DUMMY_PASSWORD_HASH);
+
+		assertThatThrownBy(() -> module.login(new LoginCommand("known@example.com", "wrong password phrase")))
+			.isInstanceOf(InvalidCredentialsException.class);
+		assertThatThrownBy(() -> module.login(new LoginCommand("unknown@example.com", "wrong password phrase")))
+			.isInstanceOf(InvalidCredentialsException.class);
+
+		assertThat(passwordHasher.verifications()).containsExactly(
+				new PasswordVerification("wrong password phrase", "argon2:correct password phrase"),
+				new PasswordVerification("wrong password phrase", "argon2:dummy password phrase"));
 	}
 
 	private static RegistrationRateLimiter noRateLimit() {
@@ -212,6 +262,20 @@ class IdentityModuleTests {
 
 			@Override
 			public void checkEmail(String normalizedEmail) {
+			}
+		};
+	}
+
+	private static PasswordHasher testPasswordHasher() {
+		return new PasswordHasher() {
+			@Override
+			public String hash(String password) {
+				return "argon2:" + password;
+			}
+
+			@Override
+			public boolean matches(String password, String passwordHash) {
+				return passwordHash.equals("argon2:" + password);
 			}
 		};
 	}
@@ -242,14 +306,26 @@ class IdentityModuleTests {
 
 		private final java.util.ArrayList<String> passwords = new java.util.ArrayList<>();
 
+		private final java.util.ArrayList<PasswordVerification> verifications = new java.util.ArrayList<>();
+
 		@Override
 		public String hash(String password) {
 			this.passwords.add(password);
 			return "argon2:" + password;
 		}
 
+		@Override
+		public boolean matches(String password, String passwordHash) {
+			this.verifications.add(new PasswordVerification(password, passwordHash));
+			return passwordHash.equals("argon2:" + password);
+		}
+
 		List<String> passwords() {
 			return List.copyOf(this.passwords);
+		}
+
+		List<PasswordVerification> verifications() {
+			return List.copyOf(this.verifications);
 		}
 
 	}
@@ -274,6 +350,15 @@ class IdentityModuleTests {
 		@Override
 		public Optional<UserProfile> findById(UUID userId) {
 			return Optional.ofNullable(this.users.get(userId));
+		}
+
+		@Override
+		public Optional<PasswordCredential> findCredentialByEmail(String email) {
+			return this.users.values()
+				.stream()
+				.filter(user -> user.email().equals(email))
+				.findFirst()
+				.map(user -> new PasswordCredential(user.id(), this.passwordHashes.getFirst()));
 		}
 
 		int creates() {
@@ -370,6 +455,9 @@ class IdentityModuleTests {
 	}
 
 	private record BucketState(long tokenUnits, Instant updatedAt) {
+	}
+
+	private record PasswordVerification(String password, String passwordHash) {
 	}
 
 	private static final class MutableClock extends Clock {

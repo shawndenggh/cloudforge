@@ -27,4 +27,9 @@ public interface IdentityStore {
 
 	Optional<UserProfile> findById(UUID userId);
 
+	Optional<PasswordCredential> findCredentialByEmail(String email);
+
+	record PasswordCredential(UUID userId, String passwordHash) {
+	}
+
 }

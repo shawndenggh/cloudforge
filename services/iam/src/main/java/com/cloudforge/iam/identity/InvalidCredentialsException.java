@@ -15,10 +15,12 @@
  */
 package com.cloudforge.iam.identity;
 
-public interface PasswordHasher {
+public final class InvalidCredentialsException extends RuntimeException {
 
-	String hash(String password);
+	private static final long serialVersionUID = 1L;
 
-	boolean matches(String password, String passwordHash);
+	InvalidCredentialsException() {
+		super("Invalid credentials");
+	}
 
 }

@@ -24,6 +24,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.cloudforge.iam.identity.IdentityValidationException.FieldError;
+import com.cloudforge.iam.identity.IdentityStore.PasswordCredential;
 
 public final class DefaultIdentityModule implements IdentityModule {
 
@@ -39,13 +40,17 @@ public final class DefaultIdentityModule implements IdentityModule {
 
 	private final Clock clock;
 
+	private final String dummyPasswordHash;
+
 	public DefaultIdentityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
-			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock) {
+			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock,
+			String dummyPasswordHash) {
 		this.identityStore = identityStore;
 		this.passwordHasher = passwordHasher;
 		this.sessionStore = sessionStore;
 		this.registrationRateLimiter = registrationRateLimiter;
 		this.clock = clock;
+		this.dummyPasswordHash = dummyPasswordHash;
 	}
 
 	@Override
@@ -62,7 +67,31 @@ public final class DefaultIdentityModule implements IdentityModule {
 			throw new IdentityValidationException(errors);
 		}
 		UserProfile user = this.identityStore.create(email, this.passwordHasher.hash(password), this.clock.instant());
-		return new Registration(user, createSession(user.id()));
+		return new Registration(user, createSession(user.id(), true));
+	}
+
+	@Override
+	public Authentication login(LoginCommand command) {
+		String email = normalizeEmail(command.email());
+		String password = Normalizer.normalize(command.password(), Normalizer.Form.NFC);
+		List<FieldError> errors = new ArrayList<>();
+		if (!isValidEmailInput(command.email(), email)) {
+			errors.add(new FieldError("email", "IAM_EMAIL_INVALID"));
+		}
+		if (password.codePointCount(0, password.length()) > 128) {
+			errors.add(new FieldError("password", "IAM_PASSWORD_LENGTH_INVALID"));
+		}
+		if (!errors.isEmpty()) {
+			throw new IdentityValidationException(errors);
+		}
+
+		Optional<PasswordCredential> credential = this.identityStore.findCredentialByEmail(email);
+		String passwordHash = credential.map(PasswordCredential::passwordHash).orElse(this.dummyPasswordHash);
+		boolean matches = this.passwordHasher.matches(password, passwordHash);
+		if (credential.isEmpty() || !matches) {
+			throw new InvalidCredentialsException();
+		}
+		return new Authentication(createSession(credential.orElseThrow().userId(), false));
 	}
 
 	@Override
@@ -80,14 +109,17 @@ public final class DefaultIdentityModule implements IdentityModule {
 		return this.identityStore.findById(userId);
 	}
 
-	private String createSession(UUID userId) {
+	private String createSession(UUID userId, boolean registration) {
 		for (int attempt = 1; attempt <= SESSION_CREATION_ATTEMPTS; attempt++) {
 			try {
 				return this.sessionStore.create(userId);
 			}
 			catch (IdentitySessionUnavailableException exception) {
 				if (attempt == SESSION_CREATION_ATTEMPTS) {
-					throw new RegistrationSessionUnavailableException();
+					if (registration) {
+						throw new RegistrationSessionUnavailableException();
+					}
+					throw new LoginSessionUnavailableException();
 				}
 			}
 		}
