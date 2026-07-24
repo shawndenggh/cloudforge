@@ -1,0 +1,58 @@
+/*
+ * Copyright 2026-present Shawn Deng and CloudForge contributors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.cloudforge.iam.config;
+
+import java.time.Clock;
+import java.util.Objects;
+
+import com.cloudforge.iam.identity.DefaultIdentityModule;
+import com.cloudforge.iam.identity.IdentityModule;
+import com.cloudforge.iam.identity.IdentitySessionStore;
+import com.cloudforge.iam.identity.IdentityStore;
+import com.cloudforge.iam.identity.PasswordHasher;
+import com.password4j.Argon2Function;
+import com.password4j.types.Argon2;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@Configuration(proxyBeanMethods = false)
+class IdentityConfiguration {
+
+	@Bean
+	Clock clock() {
+		return Clock.systemUTC();
+	}
+
+	@Bean
+	PasswordEncoder passwordEncoder() {
+		Argon2Function function = Argon2Function.getInstance(19_456, 2, 1, 32, Argon2.ID);
+		return new CloudForgeArgon2PasswordEncoder(function);
+	}
+
+	@Bean
+	PasswordHasher passwordHasher(PasswordEncoder passwordEncoder) {
+		return password -> Objects.requireNonNull(passwordEncoder.encode(password));
+	}
+
+	@Bean
+	IdentityModule identityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
+			IdentitySessionStore sessionStore, Clock clock) {
+		return new DefaultIdentityModule(identityStore, passwordHasher, sessionStore, clock);
+	}
+
+}

@@ -1,6 +1,7 @@
 [versions]
 springBoot = "4.1.0"
 springCloud = "2025.1.2"
+password4j = "1.8.4"
 
 [libraries]
 springBootDependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "springBoot" }
@@ -10,15 +11,17 @@ springBootStarterAmqp = { module = "org.springframework.boot:spring-boot-starter
 springBootStarterDataJpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
 springBootStarterFlyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
 springBootStarterSecurity = { module = "org.springframework.boot:spring-boot-starter-security" }
-springBootStarterSecurityOauth2AuthorizationServer = { module = "org.springframework.boot:spring-boot-starter-security-oauth2-authorization-server" }
 springBootStarterSessionDataRedis = { module = "org.springframework.boot:spring-boot-starter-session-data-redis" }
 springBootStarterTest = { module = "org.springframework.boot:spring-boot-starter-test" }
+testcontainersJunitJupiter = { module = "org.testcontainers:testcontainers-junit-jupiter" }
+testcontainersPostgresql = { module = "org.testcontainers:testcontainers-postgresql" }
 springBootStarterSecurityTest = { module = "org.springframework.boot:spring-boot-starter-security-test" }
 springBootStarterValidation = { module = "org.springframework.boot:spring-boot-starter-validation" }
 springBootStarterWebmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
 springCloudStarterGatewayServerWebmvc = { module = "org.springframework.cloud:spring-cloud-starter-gateway-server-webmvc" }
 flywayDatabasePostgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 postgresql = { module = "org.postgresql:postgresql" }
+password4j = { module = "com.password4j:password4j", version.ref = "password4j" }
 junitPlatformLauncher = { module = "org.junit.platform:junit-platform-launcher" }
 junitJupiter = { module = "org.junit.jupiter:junit-jupiter" }
 assertjCore = { module = "org.assertj:assertj-core" }

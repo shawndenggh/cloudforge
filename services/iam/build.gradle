@@ -11,15 +11,18 @@ dependencies {
     implementation libs.springBootStarterDataJpa
     implementation libs.springBootStarterFlyway
     implementation libs.springBootStarterSecurity
-    implementation libs.springBootStarterSecurityOauth2AuthorizationServer
     implementation libs.springBootStarterSessionDataRedis
     implementation libs.springBootStarterValidation
     implementation libs.springBootStarterWebmvc
     implementation libs.flywayDatabasePostgresql
+    implementation libs.password4j
 
     runtimeOnly libs.postgresql
 
+    testImplementation project(':services:gateway')
     testImplementation libs.springBootStarterTest
     testImplementation libs.springBootStarterSecurityTest
+    testImplementation libs.testcontainersJunitJupiter
+    testImplementation libs.testcontainersPostgresql
     testRuntimeOnly libs.junitPlatformLauncher
 }
