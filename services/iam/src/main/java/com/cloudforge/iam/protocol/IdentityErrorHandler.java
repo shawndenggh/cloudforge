@@ -26,8 +26,13 @@ import com.cloudforge.iam.identity.EmailAlreadyRegisteredException;
 import com.cloudforge.iam.identity.IdentityValidationException;
 import com.cloudforge.iam.identity.RegistrationRateLimitedException;
 import com.cloudforge.iam.identity.RegistrationRateLimitUnavailableException;
+import com.cloudforge.iam.identity.RegistrationSessionUnavailableException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ProblemDetail;
@@ -40,6 +45,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 final class IdentityErrorHandler {
 
+	private static final Logger LOGGER = LoggerFactory.getLogger(IdentityErrorHandler.class);
+
 	private static final Pattern TRACE_PARENT = Pattern
 		.compile("^[0-9a-f]{2}-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$");
 
@@ -50,6 +57,14 @@ final class IdentityErrorHandler {
 			"Password must contain 15 to 128 Unicode code points.", "IAM_PASSWORD_CONTROL_CHARACTER",
 			"Password must not contain control characters.", "IAM_PASSWORD_CONFIRMATION_MISMATCH",
 			"Password confirmation must match the password.");
+
+	private final Counter registrationSessionFailures;
+
+	IdentityErrorHandler(MeterRegistry meterRegistry) {
+		this.registrationSessionFailures = Counter.builder("cloudforge.iam.registration.session.creation.failures")
+			.description("Registrations committed without a successfully created session")
+			.register(meterRegistry);
+	}
 
 	@ExceptionHandler(UnauthenticatedException.class)
 	ProblemDetail unauthenticated() {
@@ -136,6 +151,18 @@ final class IdentityErrorHandler {
 		problem.setTitle("Dependency unavailable");
 		problem.setProperty("code", "PLATFORM_DEPENDENCY_UNAVAILABLE");
 		complete(problem, request, "platform", "dependency-unavailable");
+		return problem;
+	}
+
+	@ExceptionHandler(RegistrationSessionUnavailableException.class)
+	ProblemDetail registrationSessionUnavailable(HttpServletRequest request) {
+		this.registrationSessionFailures.increment();
+		LOGGER.warn("Registration committed but session creation remained unavailable after bounded retries");
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+				"Registration completed, but the authenticated session could not be created.");
+		problem.setTitle("Registration session unavailable");
+		problem.setProperty("code", "IAM_REGISTRATION_COMPLETED_SESSION_UNAVAILABLE");
+		complete(problem, request, "iam", "registration-completed-session-unavailable");
 		return problem;
 	}
 
