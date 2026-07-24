@@ -24,6 +24,10 @@ spring:
                 - StripPrefix=3
 
 cloudforge:
+  iam:
+    transport:
+      connect-timeout: ${IAM_CONNECT_TIMEOUT:2s}
+      read-timeout: ${IAM_READ_TIMEOUT:5s}
   security:
     secure-cookies: true
 
