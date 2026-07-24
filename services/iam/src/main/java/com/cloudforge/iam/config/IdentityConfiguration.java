@@ -49,13 +49,25 @@ class IdentityConfiguration {
 
 	@Bean
 	PasswordHasher passwordHasher(PasswordEncoder passwordEncoder) {
-		return password -> Objects.requireNonNull(passwordEncoder.encode(password));
+		return new PasswordHasher() {
+			@Override
+			public String hash(String password) {
+				return Objects.requireNonNull(passwordEncoder.encode(password));
+			}
+
+			@Override
+			public boolean matches(String password, String passwordHash) {
+				return passwordEncoder.matches(password, passwordHash);
+			}
+		};
 	}
 
 	@Bean
 	IdentityModule identityModule(IdentityStore identityStore, PasswordHasher passwordHasher,
 			IdentitySessionStore sessionStore, RegistrationRateLimiter registrationRateLimiter, Clock clock) {
-		return new DefaultIdentityModule(identityStore, passwordHasher, sessionStore, registrationRateLimiter, clock);
+		String dummyPasswordHash = passwordHasher.hash("CloudForge fixed dummy password credential");
+		return new DefaultIdentityModule(identityStore, passwordHasher, sessionStore, registrationRateLimiter, clock,
+				dummyPasswordHash);
 	}
 
 	@Bean

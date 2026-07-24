@@ -24,6 +24,8 @@ import java.util.regex.Pattern;
 
 import com.cloudforge.iam.identity.EmailAlreadyRegisteredException;
 import com.cloudforge.iam.identity.IdentityValidationException;
+import com.cloudforge.iam.identity.InvalidCredentialsException;
+import com.cloudforge.iam.identity.LoginSessionUnavailableException;
 import com.cloudforge.iam.identity.RegistrationRateLimitedException;
 import com.cloudforge.iam.identity.RegistrationRateLimitUnavailableException;
 import com.cloudforge.iam.identity.RegistrationSessionUnavailableException;
@@ -77,9 +79,10 @@ final class IdentityErrorHandler {
 
 	@ExceptionHandler(IdentityValidationException.class)
 	ProblemDetail validation(IdentityValidationException exception, HttpServletRequest request) {
+		boolean login = request.getRequestURI().equals("/auth/login");
 		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-				"One or more registration fields are invalid.");
-		problem.setTitle("Registration validation failed");
+				login ? "One or more login fields are invalid." : "One or more registration fields are invalid.");
+		problem.setTitle(login ? "Login validation failed" : "Registration validation failed");
 		problem.setProperty("code", "IAM_VALIDATION_FAILED");
 		problem.setProperty("errors",
 				exception.errors()
@@ -101,8 +104,9 @@ final class IdentityErrorHandler {
 
 	@ExceptionHandler(HttpMediaTypeNotSupportedException.class)
 	ProblemDetail unsupportedMediaType(HttpServletRequest request) {
+		boolean login = request.getRequestURI().equals("/auth/login");
 		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
-				"Registration requires Content-Type application/json.");
+				(login ? "Login" : "Registration") + " requires Content-Type application/json.");
 		problem.setTitle("Unsupported media type");
 		problem.setProperty("code", "IAM_UNSUPPORTED_MEDIA_TYPE");
 		complete(problem, request, "iam", "unsupported-media-type");
@@ -122,10 +126,30 @@ final class IdentityErrorHandler {
 	@ExceptionHandler(AlreadyAuthenticatedException.class)
 	ProblemDetail alreadyAuthenticated(HttpServletRequest request) {
 		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-				"Sign out before registering another identity.");
+				"Sign out before starting another authentication flow.");
 		problem.setTitle("Already authenticated");
 		problem.setProperty("code", "IAM_ALREADY_AUTHENTICATED");
 		complete(problem, request, "iam", "already-authenticated");
+		return problem;
+	}
+
+	@ExceptionHandler(InvalidCredentialsException.class)
+	ProblemDetail invalidCredentials(HttpServletRequest request) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED,
+				"The login email or password is incorrect.");
+		problem.setTitle("Invalid credentials");
+		problem.setProperty("code", "IAM_INVALID_CREDENTIALS");
+		complete(problem, request, "iam", "invalid-credentials");
+		return problem;
+	}
+
+	@ExceptionHandler(LoginSessionUnavailableException.class)
+	ProblemDetail loginSessionUnavailable(HttpServletRequest request) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+				"The authenticated session could not be created.");
+		problem.setTitle("Session unavailable");
+		problem.setProperty("code", "IAM_SESSION_UNAVAILABLE");
+		complete(problem, request, "iam", "session-unavailable");
 		return problem;
 	}
 

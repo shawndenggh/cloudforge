@@ -23,6 +23,7 @@ import java.util.UUID;
 import com.cloudforge.iam.identity.EmailAlreadyRegisteredException;
 import com.cloudforge.iam.identity.IdentityModule.UserProfile;
 import com.cloudforge.iam.identity.IdentityStore;
+import com.cloudforge.iam.identity.IdentityStore.PasswordCredential;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
@@ -52,6 +53,11 @@ class JpaIdentityStore implements IdentityStore {
 	@Override
 	public Optional<UserProfile> findById(UUID userId) {
 		return this.users.findById(userId).map(UserEntity::toProfile);
+	}
+
+	@Override
+	public Optional<PasswordCredential> findCredentialByEmail(String email) {
+		return this.users.findByEmail(email).map(UserEntity::toPasswordCredential);
 	}
 
 	private static boolean isEmailUniqueConstraintViolation(DataIntegrityViolationException exception) {

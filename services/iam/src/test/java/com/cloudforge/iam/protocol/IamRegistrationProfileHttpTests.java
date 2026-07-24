@@ -17,6 +17,7 @@ package com.cloudforge.iam.protocol;
 
 import java.net.CookieManager;
 import java.net.CookiePolicy;
+import java.net.HttpCookie;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -162,6 +163,135 @@ class IamRegistrationProfileHttpTests {
 				HttpResponse.BodyHandlers.ofString());
 
 		assertUnauthenticated(profile);
+	}
+
+	@Test
+	void twoClientsCanLogInToTheSameUserWithIndependentSessions() throws Exception {
+		String password = "correct horse battery staple";
+		HttpResponse<String> registration = postRegistration(HttpClient.newHttpClient(), """
+				{"email":"multi-device@example.com",
+				 "password":"%s",
+				 "confirmPassword":"%s"}
+				""".formatted(password, password), "application/json");
+		assertThat(registration.statusCode()).isEqualTo(201);
+
+		CookieManager firstCookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+		CookieManager secondCookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+		HttpClient firstClient = HttpClient.newBuilder().cookieHandler(firstCookies).build();
+		HttpClient secondClient = HttpClient.newBuilder().cookieHandler(secondCookies).build();
+
+		HttpResponse<String> firstLogin = postLogin(firstClient, """
+				{"email":"  Multi-Device@Example.COM ",
+				 "password":"%s",
+				 "futureField":true}
+				""".formatted(password));
+		HttpResponse<String> secondLogin = postLogin(secondClient, """
+				{"email":"multi-device@example.com",
+				 "password":"%s"}
+				""".formatted(password));
+
+		assertSuccessfulLogin(firstLogin);
+		assertSuccessfulLogin(secondLogin);
+		assertThat(sessionCookie(firstCookies)).isNotEqualTo(sessionCookie(secondCookies));
+
+		HttpResponse<String> firstProfile = firstClient.send(HttpRequest.newBuilder(uri("/user/profile")).GET().build(),
+				HttpResponse.BodyHandlers.ofString());
+		HttpResponse<String> secondProfile = secondClient
+			.send(HttpRequest.newBuilder(uri("/user/profile")).GET().build(), HttpResponse.BodyHandlers.ofString());
+		assertThat(firstProfile.statusCode()).isEqualTo(200);
+		assertThat(secondProfile.statusCode()).isEqualTo(200);
+		assertThat(firstProfile.body()).contains("\"email\":\"multi-device@example.com\"");
+		assertThat(secondProfile.body()).isEqualTo(firstProfile.body());
+	}
+
+	@Test
+	void successfulLoginReplacesAnUnknownClientChosenSessionId() throws Exception {
+		String password = "correct horse battery staple";
+		HttpResponse<String> registration = postRegistration(HttpClient.newHttpClient(), """
+				{"email":"session-fixation@example.com",
+				 "password":"%s",
+				 "confirmPassword":"%s"}
+				""".formatted(password, password), "application/json");
+		assertThat(registration.statusCode()).isEqualTo(201);
+		String clientChosenSession = Base64.getEncoder()
+			.encodeToString("attacker-chosen-session".getBytes(StandardCharsets.UTF_8));
+
+		HttpResponse<String> login = HttpClient.newHttpClient()
+			.send(HttpRequest.newBuilder(uri("/auth/login"))
+				.header("Content-Type", "application/json")
+				.header("Cookie", "cloudforge_session=" + clientChosenSession)
+				.POST(HttpRequest.BodyPublishers.ofString("""
+						{"email":"session-fixation@example.com",
+						 "password":"%s"}
+						""".formatted(password)))
+				.build(), HttpResponse.BodyHandlers.ofString());
+
+		assertSuccessfulLogin(login);
+		assertThat(login.headers().allValues("Set-Cookie")).filteredOn(value -> value.startsWith("cloudforge_session="))
+			.singleElement()
+			.satisfies(value -> assertThat(value).doesNotStartWith("cloudforge_session=" + clientChosenSession + ";"));
+	}
+
+	@Test
+	void loginUsesOneCredentialFailureContractWithoutLeakingAccountExistence() throws Exception {
+		String password = "correct horse battery staple";
+		HttpResponse<String> registration = postRegistration(HttpClient.newHttpClient(), """
+				{"email":"credential-check@example.com",
+				 "password":"%s",
+				 "confirmPassword":"%s"}
+				""".formatted(password, password), "application/json");
+		assertThat(registration.statusCode()).isEqualTo(201);
+
+		HttpResponse<String> wrongPassword = postLogin(HttpClient.newHttpClient(), """
+				{"email":"credential-check@example.com",
+				 "password":"wrong password phrase"}
+				""");
+		HttpResponse<String> unknownEmail = postLogin(HttpClient.newHttpClient(), """
+				{"email":"missing@example.com",
+				 "password":"wrong password phrase"}
+				""");
+
+		assertInvalidCredentials(wrongPassword);
+		assertInvalidCredentials(unknownEmail);
+		assertThat(withoutTraceId(wrongPassword.body())).isEqualTo(withoutTraceId(unknownEmail.body()));
+	}
+
+	@Test
+	void loginWithValidSessionReturnsConflictBeforeCredentialValidation() throws Exception {
+		CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+		HttpClient client = HttpClient.newBuilder().cookieHandler(cookies).build();
+		String password = "correct horse battery staple";
+		HttpResponse<String> registration = postRegistration(client, """
+				{"email":"already-authenticated-login@example.com",
+				 "password":"%s",
+				 "confirmPassword":"%s"}
+				""".formatted(password, password), "application/json");
+		assertThat(registration.statusCode()).isEqualTo(201);
+		String originalSession = sessionCookie(cookies);
+
+		HttpResponse<String> conflict = postLogin(client, "{");
+
+		assertThat(conflict.statusCode()).isEqualTo(409);
+		assertThat(conflict.headers().firstValue("Content-Type")).contains("application/problem+json");
+		assertThat(conflict.body()).contains("\"code\":\"IAM_ALREADY_AUTHENTICATED\"", "\"traceId\":\"")
+			.doesNotContain("IAM_REQUEST_BODY_INVALID", "password", "email");
+		assertThat(sessionCookie(cookies)).isEqualTo(originalSession);
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("invalidLoginRequests")
+	void loginReturnsFieldProblemDetails(String description, String body, String field, String fieldCode)
+			throws Exception {
+		HttpResponse<String> response = postLogin(HttpClient.newHttpClient(), body);
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThat(response.headers().firstValue("Content-Type")).contains("application/problem+json");
+		assertThat(response.body())
+			.contains("\"type\":\"urn:cloudforge:problem:iam:validation-failed\"",
+					"\"title\":\"Login validation failed\"", "\"status\":400", "\"instance\":\"/auth/login\"",
+					"\"code\":\"IAM_VALIDATION_FAILED\"", "\"traceId\":\"", "\"field\":\"" + field + "\"",
+					"\"code\":\"" + fieldCode + "\"")
+			.doesNotContain("password_hash", "argon2", "java.");
 	}
 
 	@ParameterizedTest(name = "{0}")
@@ -418,6 +548,13 @@ class IamRegistrationProfileHttpTests {
 		return postRegistration(HttpClient.newHttpClient(), body, "application/json");
 	}
 
+	private HttpResponse<String> postLogin(HttpClient client, String body) throws Exception {
+		return client.send(HttpRequest.newBuilder(uri("/auth/login"))
+			.header("Content-Type", "application/json")
+			.POST(HttpRequest.BodyPublishers.ofString(body))
+			.build(), HttpResponse.BodyHandlers.ofString());
+	}
+
 	private static String nextClientIp() {
 		return "192.0.2." + CLIENT_IP_SEQUENCE.updateAndGet(value -> value % 250 + 1);
 	}
@@ -454,10 +591,56 @@ class IamRegistrationProfileHttpTests {
 						""", "confirmPassword", "IAM_PASSWORD_CONFIRMATION_MISMATCH"));
 	}
 
+	private static Stream<Arguments> invalidLoginRequests() {
+		return Stream.of(Arguments.of("body must be an object", "[]", "body", "IAM_REQUEST_BODY_INVALID"),
+				Arguments.of("password is required", """
+						{"email":"valid@example.com"}
+						""", "password", "IAM_FIELD_REQUIRED"), Arguments.of("email must be valid ASCII", """
+						{"email":"usér@example.com",
+						 "password":"correct horse battery staple"}
+						""", "email", "IAM_EMAIL_INVALID"), Arguments.of("password must not exceed 128 code points", """
+						{"email":"valid@example.com",
+						 "password":"%s"}
+						""".formatted("a".repeat(129)), "password", "IAM_PASSWORD_LENGTH_INVALID"));
+	}
+
 	private static void assertUnauthenticated(HttpResponse<String> response) {
 		assertThat(response.statusCode()).isEqualTo(401);
 		assertThat(response.headers().firstValue("Content-Type")).contains("application/problem+json");
 		assertThat(response.body()).contains("\"code\":\"SECURITY_UNAUTHENTICATED\"");
+	}
+
+	private static void assertSuccessfulLogin(HttpResponse<String> response) {
+		assertThat(response.statusCode()).isEqualTo(201);
+		assertThat(response.body()).isEmpty();
+		assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+		assertThat(response.headers().allValues("Set-Cookie"))
+			.anySatisfy(value -> assertThat(value).startsWith("cloudforge_session=")
+				.contains("Path=/", "Max-Age=604800", "HttpOnly", "SameSite=Lax"));
+	}
+
+	private static void assertInvalidCredentials(HttpResponse<String> response) {
+		assertThat(response.statusCode()).isEqualTo(401);
+		assertThat(response.headers().firstValue("Content-Type")).contains("application/problem+json");
+		assertThat(response.body())
+			.contains("\"type\":\"urn:cloudforge:problem:iam:invalid-credentials\"",
+					"\"title\":\"Invalid credentials\"", "\"code\":\"IAM_INVALID_CREDENTIALS\"", "\"traceId\":\"")
+			.doesNotContain("credential-check@example.com", "missing@example.com", "wrong password phrase",
+					"password_hash", "argon2");
+	}
+
+	private static String sessionCookie(CookieManager cookies) {
+		return cookies.getCookieStore()
+			.getCookies()
+			.stream()
+			.filter(cookie -> cookie.getName().equals("cloudforge_session"))
+			.map(HttpCookie::getValue)
+			.findFirst()
+			.orElseThrow();
+	}
+
+	private static String withoutTraceId(String body) {
+		return body.replaceAll("\"traceId\":\"[0-9a-f]{32}\"", "\"traceId\":\"\"");
 	}
 
 }

@@ -15,10 +15,12 @@
  */
 package com.cloudforge.iam.identity;
 
-public interface PasswordHasher {
+public final class LoginSessionUnavailableException extends RuntimeException {
 
-	String hash(String password);
+	private static final long serialVersionUID = 1L;
 
-	boolean matches(String password, String passwordHash);
+	LoginSessionUnavailableException() {
+		super("Authenticated session could not be created");
+	}
 
 }

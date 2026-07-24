@@ -20,6 +20,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 import com.cloudforge.iam.identity.IdentityModule.UserProfile;
+import com.cloudforge.iam.identity.IdentityStore.PasswordCredential;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -58,6 +59,10 @@ class UserEntity {
 	UserProfile toProfile() {
 		return new UserProfile(Objects.requireNonNull(this.id), Objects.requireNonNull(this.email),
 				Objects.requireNonNull(this.createdAt));
+	}
+
+	PasswordCredential toPasswordCredential() {
+		return new PasswordCredential(Objects.requireNonNull(this.id), Objects.requireNonNull(this.passwordHash));
 	}
 
 }
