@@ -25,6 +25,8 @@ public interface IdentityModule {
 
 	Authentication login(LoginCommand command);
 
+	void logout(String sessionId);
+
 	void checkRegistrationSource(String clientIp);
 
 	void checkRegistrationEmail(String email);

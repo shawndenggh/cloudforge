@@ -18,11 +18,15 @@ package com.cloudforge.iam.session;
 import java.util.UUID;
 
 import com.cloudforge.iam.identity.IdentitySessionStore;
+import com.cloudforge.iam.identity.IdentitySessionRevocationUnavailableException;
 import com.cloudforge.iam.identity.IdentitySessionUnavailableException;
+import jakarta.servlet.http.HttpSession;
 
 import org.springframework.session.Session;
 import org.springframework.session.SessionRepository;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Component
 final class RedisIdentitySessionStore implements IdentitySessionStore {
@@ -43,6 +47,30 @@ final class RedisIdentitySessionStore implements IdentitySessionStore {
 		catch (RuntimeException exception) {
 			throw new IdentitySessionUnavailableException();
 		}
+	}
+
+	@Override
+	public void revoke(String sessionId) {
+		try {
+			if (!invalidateCurrentRequestSession(sessionId)) {
+				this.sessions.deleteById(sessionId);
+			}
+		}
+		catch (RuntimeException exception) {
+			throw new IdentitySessionRevocationUnavailableException();
+		}
+	}
+
+	private static boolean invalidateCurrentRequestSession(String sessionId) {
+		if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes)) {
+			return false;
+		}
+		HttpSession session = attributes.getRequest().getSession(false);
+		if (session == null || !session.getId().equals(sessionId)) {
+			return false;
+		}
+		session.invalidate();
+		return true;
 	}
 
 	private static <S extends Session> String create(SessionRepository<S> sessions, UUID userId) {

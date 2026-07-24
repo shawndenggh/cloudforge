@@ -23,6 +23,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.cloudforge.iam.identity.EmailAlreadyRegisteredException;
+import com.cloudforge.iam.identity.IdentitySessionRevocationUnavailableException;
 import com.cloudforge.iam.identity.IdentityValidationException;
 import com.cloudforge.iam.identity.InvalidCredentialsException;
 import com.cloudforge.iam.identity.LoginRateLimitUnavailableException;
@@ -152,6 +153,16 @@ final class IdentityErrorHandler {
 		problem.setTitle("Session unavailable");
 		problem.setProperty("code", "IAM_SESSION_UNAVAILABLE");
 		complete(problem, request, "iam", "session-unavailable");
+		return problem;
+	}
+
+	@ExceptionHandler(IdentitySessionRevocationUnavailableException.class)
+	ProblemDetail sessionRevocationUnavailable(HttpServletRequest request) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+				"The current session could not be safely revoked.");
+		problem.setTitle("Session revocation unavailable");
+		problem.setProperty("code", "IAM_SESSION_REVOCATION_UNAVAILABLE");
+		complete(problem, request, "iam", "session-revocation-unavailable");
 		return problem;
 	}
 

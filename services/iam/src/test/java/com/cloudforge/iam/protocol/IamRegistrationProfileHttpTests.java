@@ -222,6 +222,58 @@ class IamRegistrationProfileHttpTests {
 	}
 
 	@Test
+	void logoutClearsCurrentCookiesAndLeavesTheOtherDeviceSessionActive() throws Exception {
+		String password = "correct horse battery staple";
+		HttpResponse<String> registration = postRegistration(HttpClient.newHttpClient(), """
+				{"email":"logout-devices@example.com",
+				 "password":"%s",
+				 "confirmPassword":"%s"}
+				""".formatted(password, password), "application/json");
+		assertThat(registration.statusCode()).isEqualTo(201);
+
+		CookieManager firstCookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+		CookieManager secondCookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+		HttpClient firstClient = HttpClient.newBuilder().cookieHandler(firstCookies).build();
+		HttpClient secondClient = HttpClient.newBuilder().cookieHandler(secondCookies).build();
+		assertSuccessfulLogin(postLogin(firstClient, """
+				{"email":"logout-devices@example.com","password":"%s"}
+				""".formatted(password)));
+		assertSuccessfulLogin(postLogin(secondClient, """
+				{"email":"logout-devices@example.com","password":"%s"}
+				""".formatted(password)));
+		String firstSessionId = decodedSessionId(firstCookies);
+		String secondSessionId = decodedSessionId(secondCookies);
+
+		HttpResponse<String> logout = postLogout(firstClient);
+
+		assertSuccessfulLogout(logout);
+		assertThat(this.sessions.findById(firstSessionId)).isNull();
+		assertThat(this.sessions.findById(secondSessionId)).isNotNull();
+		assertSuccessfulLogout(postLogout(firstClient));
+
+		HttpResponse<String> firstProfile = firstClient.send(HttpRequest.newBuilder(uri("/user/profile")).GET().build(),
+				HttpResponse.BodyHandlers.ofString());
+		HttpResponse<String> secondProfile = secondClient
+			.send(HttpRequest.newBuilder(uri("/user/profile")).GET().build(), HttpResponse.BodyHandlers.ofString());
+		assertUnauthenticated(firstProfile);
+		assertThat(secondProfile.statusCode()).isEqualTo(200);
+		assertThat(secondProfile.body()).contains("\"email\":\"logout-devices@example.com\"");
+	}
+
+	@Test
+	void logoutWithoutOrWithAnUnknownSessionIsIdempotent() throws Exception {
+		assertSuccessfulLogout(postLogout(HttpClient.newHttpClient()));
+		String unknownSession = Base64.getEncoder().encodeToString("unknown-session".getBytes(StandardCharsets.UTF_8));
+		HttpResponse<String> unknown = HttpClient.newHttpClient()
+			.send(HttpRequest.newBuilder(uri("/auth/logout"))
+				.header("Cookie", "cloudforge_session=" + unknownSession)
+				.POST(HttpRequest.BodyPublishers.noBody())
+				.build(), HttpResponse.BodyHandlers.ofString());
+
+		assertSuccessfulLogout(unknown);
+	}
+
+	@Test
 	void successfulLoginReplacesAnUnknownClientChosenSessionId() throws Exception {
 		String password = "correct horse battery staple";
 		HttpResponse<String> registration = postRegistration(HttpClient.newHttpClient(), """
@@ -664,6 +716,12 @@ class IamRegistrationProfileHttpTests {
 			.build(), HttpResponse.BodyHandlers.ofString());
 	}
 
+	private HttpResponse<String> postLogout(HttpClient client) throws Exception {
+		return client.send(
+				HttpRequest.newBuilder(uri("/auth/logout")).POST(HttpRequest.BodyPublishers.noBody()).build(),
+				HttpResponse.BodyHandlers.ofString());
+	}
+
 	private static String nextClientIp() {
 		return "192.0.2." + CLIENT_IP_SEQUENCE.updateAndGet(value -> value % 250 + 1);
 	}
@@ -728,6 +786,18 @@ class IamRegistrationProfileHttpTests {
 				.contains("Path=/", "Max-Age=604800", "HttpOnly", "SameSite=Lax"));
 	}
 
+	private static void assertSuccessfulLogout(HttpResponse<String> response) {
+		assertThat(response.statusCode()).isEqualTo(204);
+		assertThat(response.body()).isEmpty();
+		assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+		assertThat(response.headers().allValues("Set-Cookie"))
+			.anySatisfy(value -> assertThat(value).startsWith("cloudforge_session=")
+				.contains("Path=/", "Max-Age=0", "HttpOnly", "SameSite=Lax"))
+			.anySatisfy(value -> assertThat(value).startsWith("cloudforge_csrf_token=")
+				.contains("Path=/", "Max-Age=0", "SameSite=Lax")
+				.doesNotContain("HttpOnly"));
+	}
+
 	private static void assertInvalidCredentials(HttpResponse<String> response) {
 		assertThat(response.statusCode()).isEqualTo(401);
 		assertThat(response.headers().firstValue("Content-Type")).contains("application/problem+json");
@@ -754,6 +824,10 @@ class IamRegistrationProfileHttpTests {
 			.map(HttpCookie::getValue)
 			.findFirst()
 			.orElseThrow();
+	}
+
+	private static String decodedSessionId(CookieManager cookies) {
+		return new String(Base64.getDecoder().decode(sessionCookie(cookies)), StandardCharsets.UTF_8);
 	}
 
 	private static String withoutTraceId(String body) {

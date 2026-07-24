@@ -90,10 +90,24 @@ final class IdentityController {
 		return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).build();
 	}
 
+	@PostMapping("/auth/logout")
+	ResponseEntity<Void> logout(HttpServletRequest servletRequest, HttpServletResponse servletResponse) {
+		this.cookieSerializer.readCookieValues(servletRequest).stream().findFirst().ifPresent(this.identities::logout);
+		expireSessionCookie(servletRequest, servletResponse);
+		expireCsrfCookie(servletResponse);
+		return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+	}
+
 	private void writeSessionCookie(HttpServletRequest request, HttpServletResponse response, String sessionId) {
 		CookieValue sessionCookie = new CookieValue(request, response, sessionId);
 		sessionCookie.setCookieMaxAge(Math.toIntExact(SESSION_COOKIE_MAX_AGE.toSeconds()));
 		this.cookieSerializer.writeCookieValue(sessionCookie);
+	}
+
+	private void expireSessionCookie(HttpServletRequest request, HttpServletResponse response) {
+		CookieValue expiredSession = new CookieValue(request, response, "");
+		expiredSession.setCookieMaxAge(0);
+		this.cookieSerializer.writeCookieValue(expiredSession);
 	}
 
 	private void expireCsrfCookie(HttpServletResponse response) {
